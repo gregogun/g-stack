@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { backends } from '../backends/index.ts';
-import { EXIT, UsageError, type Command } from '../command.ts';
+import { ConfigError, EXIT, UsageError, type Command } from '../command.ts';
 import { isOnPath } from '../executables.ts';
 import {
   BACKENDS,
@@ -97,18 +97,25 @@ export const spawn: Command = {
       );
     }
     if (!(await isOnPath(backend.executable, context.env))) {
-      throw new UsageError(
+      throw new ConfigError(
         `backend '${backendName}' needs the '${backend.executable}' CLI on PATH; ${backend.installHint}`
       );
     }
 
-    const result = await runBackend(
-      backend,
-      model,
-      `${roleBrief}\n${taskBrief}`,
-      options.timeoutMs,
-      context
-    );
+    let result;
+    try {
+      result = await runBackend(
+        backend,
+        model,
+        `${roleBrief}\n${taskBrief}`,
+        options.timeoutMs,
+        context
+      );
+    } catch (error) {
+      throw new ConfigError(
+        `could not start the '${backend.executable}' CLI: ${(error as Error).message}`
+      );
+    }
     const report = {
       status: result.status,
       role: options.role,

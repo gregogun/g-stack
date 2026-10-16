@@ -215,6 +215,37 @@ describe('gstack spawn report', () => {
     await new Promise((resolve) => setTimeout(resolve, 3200));
     await expect(readFile(marker)).rejects.toThrow();
   }, 10_000);
+  it('reports ok promptly when claude exits 0 but leaves a background job holding stdout', async () => {
+    const sandbox = await createSandbox();
+    await fakeClaude(sandbox, 'echo "the answer"\n(sleep 5) &\nexit 0');
+    await writeTask(sandbox);
+
+    const started = Date.now();
+    const result = await spawn(sandbox, '--timeout', '3');
+
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: 'ok',
+      output: 'the answer',
+    });
+  }, 10_000);
+
+  it('reports timeout close to --timeout even when a grandchild escapes the process group', async () => {
+    const sandbox = await createSandbox();
+    await fakeClaude(
+      sandbox,
+      "perl -e 'use POSIX; POSIX::setsid(); sleep 5' &\nsleep 60"
+    );
+    await writeTask(sandbox);
+
+    const started = Date.now();
+    const result = await spawn(sandbox, '--timeout', '0.5');
+
+    expect(Date.now() - started).toBeLessThan(4000);
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({ status: 'timeout' });
+  }, 10_000);
 });
 
 describe('gstack spawn errors', () => {
@@ -228,6 +259,7 @@ describe('gstack spawn errors', () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain("'claude'");
     expect(result.stderr).toMatch(/install/i);
+    expect(result.stderr).not.toContain('--help');
   });
 
   it('exits 2 with a clear error for an unknown role', async () => {
