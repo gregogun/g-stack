@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createSandbox, runCli, writeFileIn, type Sandbox } from './helpers.ts';
@@ -278,6 +278,24 @@ describe('gstack install --harness pi', () => {
       expect(
         existsSync(path.join(roots[second]!, 'skills', 'g', 'SKILL.md'))
       ).toBe(true);
+    }
+  );
+
+  it.each(['skills', 'extensions'])(
+    'refuses to install through a symlinked %s directory',
+    async (dir) => {
+      const sandbox = await createSandbox();
+      const root = userRoot(sandbox);
+      const elsewhere = path.join(sandbox.home, 'dotfiles', dir);
+      await mkdir(elsewhere, { recursive: true });
+      await mkdir(root, { recursive: true });
+      await symlink(elsewhere, path.join(root, dir));
+
+      const result = await install(sandbox);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(path.join(root, dir));
+      expect(await readdir(elsewhere)).toEqual([]);
     }
   );
 
