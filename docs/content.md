@@ -19,6 +19,17 @@ content/
 - Every skill except the router carries `metadata.discoverable: "false"` in its frontmatter. Each adapter keeps such a skill out of the model's list in whatever way its harness allows, while still letting the router reach it by path. For example, the Claude Code adapter installs hidden skills as supporting files of the router; see [install](install.md).
 - Files refer to each other with relative markdown links, for example `[how](../skills/how/SKILL.md)`.
 - A verb is written as a call in inline code, for example `` `spawn(explorer, brief)` ``.
+- A playbook's steps are a numbered list, each starting with a stable id in inline code, for example `` `explain.scope` ``. The router copies them into the todo list as `<id>: <step>`, so the list, decision log rows and later reflection all name the same step. Ids are `<playbook>.<word>`; renumbering or rewording a step keeps its id.
+
+## Shipped workflows
+
+- **explain** (`playbooks/explain.md`): for "how does X work". Its steps run the **how** skill (`skills/how/SKILL.md`), which spawns one read-only `explorer` per area of the codebase, then a `synthesizer` that combines their reports. The synthesizer labels every claim measured, inferred or guess, and measured claims name the file read or command run.
+
+The synthesizer is spawned without a model override, so it runs on whatever [config](config.md) names for the `synthesizer` role. To get a second opinion from another model family, point that role at it, for example in `.gstack/config.json`:
+
+```json
+{ "roles": { "synthesizer": { "backend": "pi", "model": "openai/gpt-5" } } }
+```
 
 ## `gstack check`
 
