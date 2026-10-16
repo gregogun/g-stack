@@ -68,7 +68,12 @@ type ExtensionAPI = {
     command: string,
     args: string[],
     options?: { signal?: AbortSignal; cwd?: string }
-  ) => Promise<{ stdout: string; stderr: string; code: number }>;
+  ) => Promise<{
+    stdout: string;
+    stderr: string;
+    code: number;
+    killed?: boolean;
+  }>;
 };
 
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
@@ -119,12 +124,22 @@ export default function gstack(pi: ExtensionAPI) {
           args.push('--timeout', String(params.timeout));
         }
         const result = await pi.exec('gstack', args, { signal, cwd: ctx.cwd });
+        // pi reports a process it killed as exit 0, so check for an abort
+        // first. gstack stops the subagent when it's stopped.
+        if (signal?.aborted || result.killed) {
+          throw new Error('spawn aborted: the subagent was stopped');
+        }
         const report = result.stdout.trim();
+        const stderr = result.stderr.trim();
         // Exit 0 and 1 both print a report; its status says ok, failed or
         // timeout. Anything else means no subagent ran.
         if ((result.code !== 0 && result.code !== 1) || report === '') {
           throw new Error(
-            `gstack spawn exited ${result.code}: ${result.stderr.trim() || 'no report'}`
+            `gstack spawn exited ${result.code}: ${
+              stderr ||
+              report ||
+              'no output; is gstack on the PATH pi started with?'
+            }`
           );
         }
         return {

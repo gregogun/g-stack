@@ -36,13 +36,23 @@ type Handler = (
 
 type Exec = { command: string; args: string[]; cwd: string | undefined };
 
+type ExecResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+  killed?: boolean;
+};
+
 /**
  * Installs g-stack for pi in `sandbox`, loads the installed extension with a
- * fake pi, and returns what it registered and what it called.
+ * fake pi, and returns what it registered and what it called. The fake
+ * `exec` runs gstack, or returns `execResult` when given (to stand in for
+ * what pi reports when it can't run gstack or kills it).
  */
 const loadExtension = async (
   sandbox: Sandbox,
-  commands: { name: string; source: string; sourceInfo: { path: string } }[]
+  commands: { name: string; source: string; sourceInfo: { path: string } }[],
+  execResult?: ExecResult
 ) => {
   const install = await runCli(['install', '--harness', 'pi'], sandbox);
   expect(install.exitCode).toBe(0);
@@ -70,6 +80,7 @@ const loadExtension = async (
     ) => {
       execs.push({ command, args, cwd: options.cwd });
       expect(command).toBe('gstack');
+      if (execResult) return execResult;
       const result = await runCli(args, sandbox, {
         cwd: path.relative(sandbox.project, options.cwd ?? sandbox.project),
       });
@@ -190,6 +201,51 @@ describe('the pi extension', () => {
         { cwd: sandbox.project }
       )
     ).rejects.toThrow(/gstack spawn exited 2: .*nobody/);
+  });
+
+  it('says the spawn was aborted when pi stopped it', async () => {
+    const sandbox = await createSandbox();
+    // pi reports a process it killed as exit 0 with killed set.
+    const { tools } = await loadExtension(sandbox, [], {
+      stdout: '',
+      stderr: '',
+      code: 0,
+      killed: true,
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      tools[0]!.execute(
+        'call-1',
+        { role: 'explorer', brief: BRIEF },
+        controller.signal,
+        undefined,
+        { cwd: sandbox.project }
+      )
+    ).rejects.toThrow(/^spawn aborted/);
+  });
+
+  it('asks whether gstack is on PATH when it printed nothing', async () => {
+    const sandbox = await createSandbox();
+    // What pi reports when the command can't be started.
+    const { tools } = await loadExtension(sandbox, [], {
+      stdout: '',
+      stderr: '',
+      code: 1,
+    });
+
+    await expect(
+      tools[0]!.execute(
+        'call-1',
+        { role: 'explorer', brief: BRIEF },
+        undefined,
+        undefined,
+        { cwd: sandbox.project }
+      )
+    ).rejects.toThrow(
+      'gstack spawn exited 1: no output; is gstack on the PATH'
+    );
   });
 
   it('registers /g, which sends the installed g skill and the task', async () => {
