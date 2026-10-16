@@ -90,20 +90,35 @@ describe('gstack log', () => {
     expect(entries.map((entry) => entry.step)).toEqual(['one', 'two']);
   });
 
+  it('appends to an existing empty log without a blank first line', async () => {
+    const sandbox = await createSandbox();
+    await writeFileIn(sandbox.project, '.gstack/decisions.jsonl', '');
+
+    await append(sandbox);
+
+    const text = await readFile(logFile(sandbox), 'utf8');
+    expect(text.startsWith('{')).toBe(true);
+  });
+
   it('accepts values starting with a dash in the --field=value form', async () => {
     const sandbox = await createSandbox();
 
     const result = await runCli(
       [
         'log',
-        ...logArgs({ ...fields, evidence: 'x' }).slice(0, -2),
+        '--step=build.verify',
+        '--decision=ship it',
+        '--reason=tests run',
+        '--evidence=--- a/file',
         '--result=-1 failing test',
       ],
       sandbox
     );
 
     expect(result.exitCode).toBe(0);
-    expect((await showJson(sandbox))[0]?.result).toBe('-1 failing test');
+    expect(await showJson(sandbox)).toMatchObject([
+      { evidence: '--- a/file', result: '-1 failing test' },
+    ]);
   });
 
   it('stores fields with tabs and newlines without corrupting the log', async () => {
