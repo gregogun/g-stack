@@ -17,7 +17,7 @@ Subagents can run in parallel: send several Agent or Bash calls in one message.
 
 ## `todo(steps)`
 
-Use the TodoWrite tool (or the task tools that replace it in newer versions). Write every step with its id, for example `explain-1: Read the entry point`. Mark a step `in_progress` while it runs and `completed` when done. A skipped step is marked completed with `skipped: <reason>` added to its text, so it stays on the list.
+Use the TodoWrite tool (or the task tools that replace it in newer versions). Write every step with its id, for example `explain.scope: Pin down the question`. Mark a step `in_progress` while it runs and `completed` when done. A skipped step is marked completed with `skipped: <reason>` added to its text, so it stays on the list.
 
 ## `ask(question)`
 
