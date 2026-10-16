@@ -516,6 +516,23 @@ describe('gstack spawn environment', () => {
       });
     }
   );
+
+  it('refuses to run inside a subagent (GSTACK_SUBAGENT set) and exits 2', async () => {
+    const sandbox = await createSandbox();
+    await fakeAgent(sandbox, 'claude');
+    await writeTask(sandbox);
+
+    const result = await runCli(
+      ['spawn', '--role', 'explorer', '--brief', 'task.md'],
+      sandbox,
+      { env: { GSTACK_SUBAGENT: '1' } }
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('already inside a g-stack subagent');
+    expect(existsSync(path.join(sandbox.home, 'claude-args'))).toBe(false);
+  });
 });
 
 /** Whether a process with this pid is still running. */

@@ -42,7 +42,7 @@ Run `gstack transcript` with the `bash` tool. It prints the session as JSON in o
 
 If a verb's tool isn't available in this session (for example the extension isn't loaded, or `gstack` isn't on `PATH`):
 
-- `spawn`: if the `bash` tool works and `gstack` is on `PATH`, save the task brief to a temporary file and run `gstack spawn --role <role> --brief <file>`; its stdout is the same JSON report. Otherwise do the role's work yourself in the main session, following the role brief, and say in the report that it ran without a subagent.
+- `spawn`: if you are a subagent yourself (`GSTACK_SUBAGENT` is set), do the work yourself: `gstack spawn` refuses to run inside a subagent. Otherwise, if the `bash` tool works and `gstack` is on `PATH`, save the task brief to a temporary file and run `gstack spawn --role <role> --brief <file>`; its stdout is the same JSON report. Otherwise do the role's work yourself in the main session, following the role brief, and say in the report that it ran without a subagent.
 - Any other verb: tell the user which verb is unavailable and carry on without it.
 
 ## How g-stack is installed in pi
@@ -53,5 +53,5 @@ Checked against pi 0.74.0. pi's docs: [skills](https://github.com/earendil-works
 - **Skills.** pi lists each directory under `skills/` that holds a `SKILL.md` as a skill and looks no deeper, so only `g` is listed, as `/skill:g`. The other skills, under `skills/g/skills/`, are read by path when linked.
 - **The `spawn` tool.** The extension registers it with pi's `registerTool`. It writes the brief to a temporary file, runs `gstack spawn --role <role> --brief <file>` (plus `--model` and `--timeout` when given) in the session's directory, and returns the JSON report. `gstack` must be on the `PATH` pi was started with.
 - **The `/g` command.** The extension registers it with pi's `registerCommand`. It finds the loaded g skill and sends its body followed by the task, as `/skill:g <task>` would.
-- **Subagents.** `gstack spawn` sets `GSTACK_SUBAGENT=1`. In a pi subagent the extension registers neither the tool nor the command, so a subagent can't fan out again.
+- **Subagents.** `gstack spawn` sets `GSTACK_SUBAGENT=1`. In a pi subagent the extension registers neither the tool nor the command, and `gstack spawn` itself refuses to run (exit 2), so a subagent can't fan out again, even through `bash`.
 - **One scope.** If g-stack is installed for both the user and the project, pi loads both extensions and renames the commands to `/g:1` and `/g:2`, so plain `/g` stops working.

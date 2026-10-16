@@ -70,6 +70,12 @@ export const spawn: Command = {
     'Run a subagent with a role and task brief; print its report as JSON.',
   run: async (args, context) => {
     const options = parse(args);
+    // runBackend marks every subagent with GSTACK_SUBAGENT; one level only.
+    if (context.env.GSTACK_SUBAGENT) {
+      throw new ConfigError(
+        "already inside a g-stack subagent (GSTACK_SUBAGENT is set); subagents can't spawn more subagents, so do the work yourself"
+      );
+    }
 
     const roleBrief = await readRoleBrief(options.role);
     const briefFile = path.resolve(context.cwd, options.brief);
