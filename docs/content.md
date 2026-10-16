@@ -25,10 +25,13 @@ content/
 
 - **explain** (`playbooks/explain.md`): for "how does X work". Its steps run the **how** skill (`skills/how/SKILL.md`), which spawns one read-only `explorer` per area of the codebase, then a `synthesizer` that combines their reports. The synthesizer labels every claim measured, inferred or guess, and measured claims name the file read or command run.
 
-The synthesizer is spawned without a model override, so it runs on whatever [config](config.md) names for the `synthesizer` role. To get a second opinion from another model family, point that role at it, for example in `.gstack/config.json`:
+The synthesizer is spawned without a model override, so it runs on whatever [config](config.md) names for the `synthesizer` role. To get a second opinion from another model family, point that role at it, for example in `.gstack/config.json`. Set `defaultBackend` too: once `pi` is on `PATH` it becomes the default backend for every role, so without it the explorers would quietly move to pi as well.
 
 ```json
-{ "roles": { "synthesizer": { "backend": "pi", "model": "openai/gpt-5" } } }
+{
+  "defaultBackend": "claude",
+  "roles": { "synthesizer": { "backend": "pi", "model": "openai/gpt-5" } }
+}
 ```
 
 ## `gstack check`

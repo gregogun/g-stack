@@ -22,8 +22,8 @@ that section for the step.
 2. Name the areas of the codebase that answer it: directories, modules, entry
    points or flows. Look around only enough to name them; the explorers do the
    reading.
-3. Pick one to four areas that don't overlap. One small area gets one
-   explorer. If the question spans more than four, pick the four that matter
+3. Pick one to four areas that don't overlap. If the question covers one
+   small area, use one explorer. If the question spans more than four, pick the four that matter
    most and note the rest for the reply.
 
 ## Explore
@@ -48,7 +48,7 @@ already known, such as docs that describe this area>
 
 ## ACCEPTANCE
 
-Every claim names the file it rests on and is labelled measured, inferred or
+Every claim names the file or command it rests on and is labelled measured, inferred or
 guess.
 
 ## REPORT
@@ -62,9 +62,9 @@ it fails again, record the area as missing and carry on.
 ## Synthesize
 
 Write one task brief holding the question and every explorer report, and run
-`spawn(synthesizer, brief)`. Leave `model` out, so the synthesizer runs on the
-model configured for its role; that is how it gets a different model family
-from the explorers.
+`spawn(synthesizer, brief)`. Leave `model` out, so the model configured for its
+role is used; point that role at another model family in config to get a
+second opinion.
 
 ```markdown
 ## GOAL

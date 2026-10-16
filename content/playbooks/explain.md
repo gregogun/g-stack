@@ -12,11 +12,11 @@ defined in [the verb contract](../HARNESS.md).
 Each step starts with its id. Copy the ids into the todo list unchanged, so
 the list, any logs and later reflection name the same step.
 
-1. `explain.scope`: Pin down the question and the areas that answer it (how, Split). If the request could mean two different things, `ask(question)` which one first.
-2. `explain.prior`: Read what is already written about those areas, such as a README, docs or decision records, and add what you learn to each explorer's CONTEXT. Skip when nothing written covers them.
-3. `explain.explore`: Fan out to one explorer per area (how, Explore).
-4. `explain.synthesize`: Hand the explorer reports to a synthesizer (how, Synthesize).
-5. `explain.answer`: Reply with the labelled answer (how, Reply).
+1. `explain.scope`: Pin down the question and the areas that answer it (run the Split section of the how skill). If the request could mean two different things, `ask(question)` which one first.
+2. `explain.prior`: Read what is already written about those areas, such as a README, docs or decision records, and keep what you learn for each explorer's CONTEXT. Skip when nothing written covers them.
+3. `explain.explore`: Fan out to one explorer per area (run the Explore section of the how skill).
+4. `explain.synthesize`: Hand the explorer reports to a synthesizer (run the Synthesize section of the how skill).
+5. `explain.answer`: Reply with the labelled answer (run the Reply section of the how skill).
 
 A step is skipped only when its own text says when to skip it. A skipped step
 stays on the list, marked skipped, with its reason.
