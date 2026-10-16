@@ -71,6 +71,8 @@ The install root is pi's config directory, not a skill directory, because pi loo
   - the `spawn` tool, `{role, brief, model?, timeout?}`. It writes the brief to a temporary file, runs `gstack spawn --role <role> --brief <file> [--model <model>] [--timeout <seconds>]` in the session's directory and returns the JSON report as the tool result. Exit 1 (the subagent failed or timed out) still returns the report. Any other exit, or no report, fails the tool call with gstack's error.
   - the `/g <task>` command. It sends the installed g skill and the task to the model, the same message `/skill:g <task>` sends. If pi hasn't loaded the g skill, it shows an error instead.
 
+In a pi subagent started by `gstack spawn` (which sets `GSTACK_SUBAGENT=1`, see [spawn](spawn.md)), the extension registers nothing, so subagents can't start the router or fan out again.
+
 The extension imports nothing from pi. The few parts of the extension API it uses are typed in the file itself, so it needs no dependencies and no build step.
 
 For the extension to work, `gstack` must be on the `PATH` pi was started with. pi reads a project's `.pi` directory in the directory it was started in, not at the git root, so after `--project`, start pi at the project root.

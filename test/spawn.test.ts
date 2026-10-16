@@ -488,6 +488,36 @@ describe('gstack spawn report', () => {
   }, 10_000);
 });
 
+describe('gstack spawn environment', () => {
+  it.each(['claude', 'pi'] as const)(
+    'runs the %s backend with gstack’s environment plus GSTACK_SUBAGENT=1',
+    async (backend) => {
+      const sandbox = await createSandbox();
+      await fakeAgent(sandbox, backend, 'echo "$GSTACK_SUBAGENT $HOME $EXTRA"');
+      await writeTask(sandbox);
+
+      const result = await runCli(
+        [
+          'spawn',
+          '--role',
+          'explorer',
+          '--brief',
+          'task.md',
+          '--backend',
+          backend,
+        ],
+        sandbox,
+        { env: { EXTRA: 'kept' } }
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        output: `1 ${sandbox.home} kept`,
+      });
+    }
+  );
+});
+
 /** Whether a process with this pid is still running. */
 const isRunning = (pid: number) => {
   try {

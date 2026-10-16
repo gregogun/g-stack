@@ -79,6 +79,10 @@ type ExtensionAPI = {
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
 
 export default function gstack(pi: ExtensionAPI) {
+  // `gstack spawn` sets this for its subagents. A subagent does one task, so
+  // it gets no spawn tool and no /g: it can't start the router or fan out.
+  if (process.env.GSTACK_SUBAGENT) return;
+
   pi.registerTool({
     name: 'spawn',
     label: 'Spawn',

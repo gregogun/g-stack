@@ -39,7 +39,9 @@ export const runBackend = (
     // Its own process group, so a timeout kills anything it started too.
     const child = spawn(backend.executable, backend.args(model), {
       cwd: context.cwd,
-      env: context.env,
+      // Marks the run as a subagent, so harness integrations (the pi
+      // extension) can stay out of it and subagents don't fan out again.
+      env: { ...context.env, GSTACK_SUBAGENT: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: true,
     });

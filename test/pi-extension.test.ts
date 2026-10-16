@@ -8,7 +8,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createSandbox,
   fakeBin,
@@ -290,6 +290,23 @@ describe('the pi extension', () => {
 
     expect(sent[0]?.content).toMatch(/<\/skill>$/);
     expect(sent[0]?.options).toEqual({ deliverAs: 'followUp' });
+  });
+
+  describe('inside a gstack subagent', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('registers nothing, so the subagent cannot fan out again', async () => {
+      const sandbox = await createSandbox();
+      // The extension runs inside pi, which gstack spawn starts with this set.
+      vi.stubEnv('GSTACK_SUBAGENT', '1');
+
+      const { tools, handlers } = await loadExtension(sandbox, []);
+
+      expect(tools).toEqual([]);
+      expect([...handlers.keys()]).toEqual([]);
+    });
   });
 
   it('says so when pi has not loaded the g skill', async () => {

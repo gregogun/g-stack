@@ -11,7 +11,7 @@ gstack spawn --role <role> --brief <file> [--backend <backend>] [--model <model>
 - `--backend`, `--model`: override [model resolution](config.md). `--model default` passes no model flag.
 - `--timeout`: seconds before the subagent is killed (default 600; fractions allowed).
 
-The subagent's input, on stdin, is the role brief, a newline, then the task brief, each exactly as in its file. The subagent runs in the current directory with gstack's environment.
+The subagent's input, on stdin, is the role brief, a newline, then the task brief, each exactly as in its file. The subagent runs in the current directory with gstack's environment, plus `GSTACK_SUBAGENT=1` (for every backend). That marks the run as a subagent so harness integrations can stay out of it: the pi extension registers no `spawn` tool and no `/g` command when it's set, so a pi subagent can't start the router or fan out again.
 
 ## Backends
 
