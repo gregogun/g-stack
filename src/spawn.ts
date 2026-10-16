@@ -15,6 +15,9 @@ export type RunResult = {
 /** How long a timed-out child gets after SIGTERM before SIGKILL. */
 const KILL_GRACE_MS = 2000;
 
+/** How long to wait for output after the child exits. */
+const CLOSE_GRACE_MS = 200;
+
 /**
  * Runs `backend` headlessly in `context.cwd` with `prompt` on stdin. The
  * child's stderr is passed through. Past `timeoutMs`, the child's whole
@@ -28,7 +31,7 @@ export const runBackend = (
   context: Context
 ): Promise<RunResult> =>
   new Promise((resolve, reject) => {
-    const started = Date.now();
+    const started = performance.now();
     // Its own process group, so a timeout kills anything it started too.
     const child = spawn(backend.executable, backend.args(model), {
       cwd: context.cwd,
@@ -56,26 +59,50 @@ export const runBackend = (
         // Already gone.
       }
     };
-    let timedOut = false;
-    let forceKill: NodeJS.Timeout | undefined;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killGroup('SIGTERM');
-      forceKill = setTimeout(() => killGroup('SIGKILL'), KILL_GRACE_MS);
-    }, timeoutMs);
 
-    child.on('error', (error) => {
-      clearTimeout(timer);
-      clearTimeout(forceKill);
-      reject(error);
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      clearTimeout(forceKill);
+    const timers = new Set<NodeJS.Timeout>();
+    const after = (ms: number, fn: () => void) => {
+      timers.add(setTimeout(fn, ms));
+    };
+    let settled = false;
+    let timedOut = false;
+    let exitCode: number | null = null;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      timers.forEach(clearTimeout);
+      // A grandchild may still hold the pipes open; stop waiting for it.
+      child.stdout.destroy();
+      child.stderr.destroy();
       resolve({
-        status: timedOut ? 'timeout' : code === 0 ? 'ok' : 'failed',
-        durationMs: Date.now() - started,
+        status: timedOut ? 'timeout' : exitCode === 0 ? 'ok' : 'failed',
+        durationMs: Math.round(performance.now() - started),
         output: stdout.trimEnd(),
       });
+    };
+
+    after(timeoutMs, () => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      after(KILL_GRACE_MS, () => {
+        killGroup('SIGKILL');
+        // Resolve even if the child never reports its exit.
+        after(CLOSE_GRACE_MS, settle);
+      });
     });
+
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      timers.forEach(clearTimeout);
+      reject(error);
+    });
+    // Settle on exit, not close: a background job the child left behind can
+    // keep stdout open long after the child is done. Give close a moment to
+    // collect the last output, then stop waiting.
+    child.on('exit', (code) => {
+      exitCode = code;
+      after(CLOSE_GRACE_MS, settle);
+    });
+    child.on('close', settle);
   });

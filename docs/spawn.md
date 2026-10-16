@@ -34,7 +34,7 @@ The subagent's input, on stdin, is the role brief, a newline, then the task brie
 
 - `status`: `ok` (the CLI exited 0), `failed` (it exited non-zero) or `timeout` (it was killed at the timeout, with everything it started).
 - `model`: the model passed to the backend, or `null` when no model flag was passed.
-- `output`: the backend's stdout with trailing whitespace removed. The backend's stderr is passed through to gstack's stderr.
+- `output`: the backend's stdout with trailing whitespace removed, collected until shortly after the CLI exits. Background jobs it leaves behind aren't waited for. The backend's stderr is passed through to gstack's stderr.
 
 ## Exit codes
 
