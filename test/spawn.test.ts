@@ -1,5 +1,5 @@
 import { spawn as spawnProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -594,14 +594,27 @@ describe('gstack spawn stopped by a signal', () => {
       const exited = new Promise<number | null>((resolve) =>
         gstack.on('exit', (exitCode) => resolve(exitCode))
       );
-      await waitFor(() => existsSync(pidFile));
-      const backend = Number(await readFile(pidFile, 'utf8'));
-      expect(isRunning(backend)).toBe(true);
+      // The file exists before echo has written the pid; wait for the line.
+      let pid = '';
+      await waitFor(() => {
+        pid = existsSync(pidFile) ? readFileSync(pidFile, 'utf8') : '';
+        return pid.endsWith('\n');
+      });
+      const backend = Number(pid);
+      try {
+        expect(isRunning(backend)).toBe(true);
 
-      gstack.kill(signal);
+        gstack.kill(signal);
 
-      expect(await exited).toBe(code);
-      await waitFor(() => !isRunning(backend), 1000);
+        expect(await exited).toBe(code);
+        await waitFor(() => !isRunning(backend), 1000);
+      } finally {
+        // Don't leave the sleep (or gstack) running if an assertion failed.
+        if (isRunning(backend)) process.kill(backend, 'SIGKILL');
+        if (gstack.exitCode === null && gstack.signalCode === null) {
+          gstack.kill('SIGKILL');
+        }
+      }
     },
     15_000
   );
