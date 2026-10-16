@@ -5,7 +5,14 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // Keep in sync with ignorePatterns in .oxlintrc.json.
-    ignores: ['node_modules', 'dist', 'build', 'coverage', '.output'],
+    ignores: [
+      'node_modules',
+      'dist',
+      'build',
+      'coverage',
+      '.output',
+      '.claude/worktrees',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
