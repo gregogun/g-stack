@@ -133,6 +133,49 @@ describe('gstack check on broken references', () => {
     );
   });
 
+  it('does not flag a file whose name starts with two dots', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/..notes.md': 'notes\n',
+      'content/playbooks/build.md': 'See [notes](../..notes.md).\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.stdout).toContain('0 problems');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('reports malformed percent-encoding as a broken reference', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/playbooks/build.md': 'Get [deal](50%off.md).\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      "content/playbooks/build.md:1: broken reference '50%off.md'"
+    );
+  });
+
+  it('ignores links inside inline code and HTML comments', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/playbooks/build.md':
+        'Write links like `[how](nope.md)`.\n<!-- [old](gone.md) -->\n<!--\n[older](gone.md)\n-->\nThen [real](missing.md).\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      "content/playbooks/build.md:6: broken reference 'missing.md'"
+    );
+    expect(result.stdout).toContain('1 problem');
+  });
+
   it('fails naming the router file when there is no router', async () => {
     const sandbox = await createSandbox();
     await writeContent(sandbox, { [ROUTER]: null });
@@ -147,8 +190,15 @@ describe('gstack check on broken references', () => {
 describe('gstack check on harness-specific content', () => {
   it.each([
     ['Claude Code', 'Run this in Claude Code.'],
-    ['pi', 'Install the pi extension first.'],
+    ['Pi', 'Install the Pi extension first.'],
+    ['Cursor', 'Open the project in Cursor.'],
+    ['pi-coding-agent', 'Needs pi-coding-agent installed.'],
+    ['.pi', 'Put it in .pi/skills.'],
+    ['.cursor', 'Rules live in .cursor/rules.'],
     ['TodoWrite', 'Use TodoWrite for steps.'],
+    ['Amp', 'Works in Amp too.'],
+    ['Cline', 'Works in Cline too.'],
+    ['Zed', 'Works in Zed too.'],
   ])('fails naming the file, line and term %s', async (term, line) => {
     const sandbox = await createSandbox();
     await writeContent(sandbox, {
@@ -189,6 +239,19 @@ describe('gstack check on harness-specific content', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it('does not flag ordinary words that share a name with a harness', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/skills/how/SKILL.md':
+        'Page with a database cursor.\nThe area is pi r squared.\nAmplify the amp, zed and roo.\nSee report.pdf and config.pi.\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.stdout).toContain('0 problems');
+    expect(result.exitCode).toBe(0);
+  });
+
   it('fails naming the file, line and verb for a non-contract verb', async () => {
     const sandbox = await createSandbox();
     await writeContent(sandbox, {
@@ -219,6 +282,49 @@ describe('gstack check on harness-specific content', () => {
       "content/skills/how/SKILL.md:3: uses 'schedule', which is not a verb in the contract"
     );
     expect(result.stdout).toContain('1 problem');
+  });
+
+  it('lets code examples through in language-tagged fences', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/skills/how/SKILL.md':
+        '```ts\nload(file);\nfetch(url).then(parse);\n```\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.stdout).toContain('0 problems');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('catches capitalised verbs and a space before the parenthesis', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/skills/how/SKILL.md':
+        '1. `Spawn(explorer, brief)`\n2. `delegate (task)`\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      "content/skills/how/SKILL.md:1: uses 'Spawn', which is not a verb in the contract"
+    );
+    expect(result.stdout).toContain(
+      "content/skills/how/SKILL.md:2: uses 'delegate', which is not a verb in the contract"
+    );
+  });
+
+  it('does not treat camelCase identifiers in inline code as verbs', async () => {
+    const sandbox = await createSandbox();
+    await writeContent(sandbox, {
+      'content/skills/how/SKILL.md': 'Trace `handleRequest()` to its caller.\n',
+    });
+
+    const result = await check(sandbox);
+
+    expect(result.stdout).toContain('0 problems');
+    expect(result.exitCode).toBe(0);
   });
 
   it('accepts every contract verb', async () => {
