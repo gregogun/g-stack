@@ -58,6 +58,15 @@ describe('gstack models get with no config', () => {
     });
   });
 
+  it('ignores a directory named pi on PATH', async () => {
+    const sandbox = await createSandbox();
+    await mkdir(path.join(sandbox.bin, 'pi'));
+
+    expect(await getJson(sandbox, 'explorer')).toMatchObject({
+      backend: 'claude',
+    });
+  });
+
   it('ignores a pi on PATH that is not executable', async () => {
     const sandbox = await createSandbox();
     await writeFileIn(sandbox.bin, 'pi', 'not a program');
@@ -115,7 +124,6 @@ describe('gstack models get with config', () => {
 
   it('finds repo config at the project root from a subdirectory', async () => {
     const sandbox = await createSandbox();
-    await mkdir(path.join(sandbox.project, '.git'));
     await mkdir(path.join(sandbox.project, 'src', 'deep'), { recursive: true });
     await repoConfig(sandbox, { roles: { explorer: { model: 'opus' } } });
 
@@ -241,6 +249,14 @@ describe('gstack models get with invalid config', () => {
     const file = await repoConfig(sandbox, { defaultBackend: 'codex' });
 
     await expectConfigError(sandbox, file, 'defaultBackend');
+  });
+
+  it('names the file when the config cannot be read', async () => {
+    const sandbox = await createSandbox();
+    const file = path.join(sandbox.home, 'config.json');
+    await mkdir(file);
+
+    await expectConfigError(sandbox, file, 'cannot read');
   });
 
   it('names the file when the config is not an object', async () => {
