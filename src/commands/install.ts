@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { claudeCode } from '../adapters/claude-code.ts';
+import { pi } from '../adapters/pi.ts';
 import { EXIT, UsageError, type Command } from '../command.ts';
 import {
   InstallError,
@@ -8,7 +9,7 @@ import {
 } from '../install.ts';
 
 /** Every supported harness. To add one, append its adapter here. */
-const adapters: Adapter[] = [claudeCode];
+const adapters: Adapter[] = [claudeCode, pi];
 
 const names = () => adapters.map((adapter) => adapter.harness).join(', ');
 
