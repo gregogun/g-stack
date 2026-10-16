@@ -54,5 +54,5 @@ How `pi -p` behaves, as checked against `@earendil-works/pi-coding-agent` 0.74.0
 
 - `0`: the subagent finished (`ok`).
 - `1`: the subagent ran but failed or timed out. The report is still printed.
-  $1the backend's CLI isn't on `PATH`, or gstack is already running inside a subagent (`GSTACK_SUBAGENT` is set). Nothing ran, no report is printed, and the error goes to stderr.
+- `2`: bad arguments, an unknown role, an unreadable brief, invalid config, the backend's CLI isn't on `PATH`, or gstack is already running inside a subagent (`GSTACK_SUBAGENT` is set). Nothing ran, no report is printed, and the error goes to stderr.
 - `128 + signal number` (`130` for SIGINT, `143` for SIGTERM, `129` for SIGHUP): gstack was stopped by that signal. It first stops the backend and everything it started (SIGTERM to the backend's process group, then SIGKILL to whatever is left once the backend exits, or after 2 seconds) so no subagent is left running. No report is printed. A second signal exits at once.
