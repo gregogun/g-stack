@@ -11,6 +11,7 @@
     "types:check": "tsc --pretty --noEmit",
     "knip": "knip",
     "format:check": "prettier --check .",
+    "test": "vitest run",
     "prepare": "lefthook install"
   },
   "packageManager": "pnpm@10.5.2",
@@ -29,6 +30,7 @@
     "oxlint": "^1.88.0",
     "prettier": "^3.9.10",
     "typescript": "~6.0",
-    "typescript-eslint": "^8.71.2"
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5"
   }
 }
