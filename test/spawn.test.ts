@@ -16,31 +16,46 @@ const explorerBrief = await readFile(
 
 const TASK = 'How does model resolution work?\n\nLook at src/models.ts.\n';
 
+type AgentCli = 'claude' | 'pi';
+
 /**
- * A fake `claude` that records its args (one per line) and stdin into the
- * sandbox, then runs `then` (by default: print an answer and exit 0).
+ * A fake agent CLI `name` that records its args (one per line) and stdin into
+ * the sandbox, then runs `then` (by default: print an answer and exit 0).
  */
-const fakeClaude = (
+const fakeAgent = (
   sandbox: Sandbox,
+  name: AgentCli,
   then = 'echo "the answer"'
 ): Promise<string> =>
   fakeBin(
     sandbox,
-    'claude',
+    name,
     [
-      `printf '%s\\n' "$@" > '${path.join(sandbox.home, 'claude-args')}'`,
-      `cat > '${path.join(sandbox.home, 'claude-stdin')}'`,
+      `printf '%s\\n' "$@" > '${path.join(sandbox.home, `${name}-args`)}'`,
+      `cat > '${path.join(sandbox.home, `${name}-stdin`)}'`,
       then,
     ].join('\n')
   );
 
-const recordedArgs = async (sandbox: Sandbox): Promise<string[]> =>
-  (await readFile(path.join(sandbox.home, 'claude-args'), 'utf8'))
+const fakeClaude = (sandbox: Sandbox, then?: string) =>
+  fakeAgent(sandbox, 'claude', then);
+
+const fakePi = (sandbox: Sandbox, then?: string) =>
+  fakeAgent(sandbox, 'pi', then);
+
+const recordedArgs = async (
+  sandbox: Sandbox,
+  name: AgentCli = 'claude'
+): Promise<string[]> =>
+  (await readFile(path.join(sandbox.home, `${name}-args`), 'utf8'))
     .split('\n')
     .slice(0, -1);
 
-const recordedStdin = (sandbox: Sandbox): Promise<string> =>
-  readFile(path.join(sandbox.home, 'claude-stdin'), 'utf8');
+const recordedStdin = (
+  sandbox: Sandbox,
+  name: AgentCli = 'claude'
+): Promise<string> =>
+  readFile(path.join(sandbox.home, `${name}-stdin`), 'utf8');
 
 const writeTask = (sandbox: Sandbox, content = TASK) =>
   writeFileIn(sandbox.project, 'task.md', content);
@@ -151,6 +166,199 @@ describe('gstack spawn with the claude backend', () => {
     expect(await realpath(output)).toBe(
       await realpath(path.join(sandbox.project, 'sub'))
     );
+  });
+});
+
+describe('gstack spawn with the pi backend', () => {
+  it('passes the role brief then the task brief to pi unchanged', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await writeTask(sandbox);
+
+    const result = await spawn(sandbox, '--backend', 'pi');
+
+    expect(result.stderr).toBe('');
+    expect(result.exitCode).toBe(0);
+    expect(await recordedStdin(sandbox, 'pi')).toBe(
+      `${explorerBrief}\n${TASK}`
+    );
+  });
+
+  it('runs pi in print mode without saving a session, and no model flag for the default model', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await writeTask(sandbox);
+
+    await spawn(sandbox, '--backend', 'pi');
+
+    expect(await recordedArgs(sandbox, 'pi')).toEqual(['-p', '--no-session']);
+  });
+
+  it('passes the resolved model from config to pi as --model, unchanged', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await writeTask(sandbox);
+    await writeFileIn(
+      sandbox.home,
+      'config.json',
+      JSON.stringify({
+        roles: { explorer: { backend: 'pi', model: 'openai/gpt-5:high' } },
+      })
+    );
+
+    const result = await spawn(sandbox);
+
+    expect(result.exitCode).toBe(0);
+    expect(await recordedArgs(sandbox, 'pi')).toEqual([
+      '-p',
+      '--no-session',
+      '--model',
+      'openai/gpt-5:high',
+    ]);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      backend: 'pi',
+      model: 'openai/gpt-5:high',
+    });
+  });
+
+  it('lets --model override config, and --model default passes no model flag', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await writeTask(sandbox);
+    await writeFileIn(
+      sandbox.home,
+      'config.json',
+      JSON.stringify({ roles: { explorer: { backend: 'pi', model: 'haiku' } } })
+    );
+
+    await spawn(sandbox, '--model', 'sonnet');
+    expect(await recordedArgs(sandbox, 'pi')).toEqual([
+      '-p',
+      '--no-session',
+      '--model',
+      'sonnet',
+    ]);
+
+    const result = await spawn(sandbox, '--model', 'default');
+    expect(await recordedArgs(sandbox, 'pi')).toEqual(['-p', '--no-session']);
+    expect(JSON.parse(result.stdout)).toMatchObject({ model: null });
+  });
+
+  it('runs pi when config sets it as the default backend', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await fakeClaude(sandbox);
+    await writeTask(sandbox);
+    await writeFileIn(
+      sandbox.home,
+      'config.json',
+      JSON.stringify({ defaultBackend: 'pi' })
+    );
+
+    const result = await spawn(sandbox);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ backend: 'pi' });
+    expect(await recordedStdin(sandbox, 'pi')).toBe(
+      `${explorerBrief}\n${TASK}`
+    );
+    await expect(recordedStdin(sandbox, 'claude')).rejects.toThrow();
+  });
+
+  it('runs pi by default when pi is on PATH, even with claude there too', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await fakeClaude(sandbox);
+    await writeTask(sandbox);
+
+    const result = await spawn(sandbox);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ backend: 'pi' });
+    await expect(recordedStdin(sandbox, 'claude')).rejects.toThrow();
+  });
+
+  it('lets --backend pi override a config that picks claude', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox);
+    await fakeClaude(sandbox);
+    await writeTask(sandbox);
+    await writeFileIn(
+      sandbox.home,
+      'config.json',
+      JSON.stringify({ defaultBackend: 'claude' })
+    );
+
+    const result = await spawn(sandbox, '--backend', 'pi');
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ backend: 'pi' });
+    await expect(recordedStdin(sandbox, 'claude')).rejects.toThrow();
+  });
+
+  it("reports ok with pi's answer and exits 0", async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox, 'printf "line one\\nline two\\n"');
+    await writeTask(sandbox);
+
+    const result = await spawn(sandbox, '--backend', 'pi');
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: 'ok',
+      role: 'explorer',
+      backend: 'pi',
+      model: null,
+      output: 'line one\nline two',
+    });
+  });
+
+  it('reports failed and exits 1 when pi exits non-zero', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox, 'echo "Request error" >&2\nexit 1');
+    await writeTask(sandbox);
+
+    const result = await spawn(sandbox, '--backend', 'pi');
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: 'failed',
+      backend: 'pi',
+      output: '',
+    });
+    expect(result.stderr).toContain('Request error');
+  });
+
+  it('kills pi, reports timeout and exits 1 when it runs past --timeout', async () => {
+    const sandbox = await createSandbox();
+    await fakePi(sandbox, 'sleep 30');
+    await writeTask(sandbox);
+
+    const started = Date.now();
+    const result = await spawn(sandbox, '--backend', 'pi', '--timeout', '0.3');
+
+    expect(Date.now() - started).toBeLessThan(2500);
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: 'timeout',
+      backend: 'pi',
+    });
+  }, 10_000);
+
+  it('exits 2 and says how to install pi when it is missing', async () => {
+    const sandbox = await createSandbox();
+    await fakeClaude(sandbox);
+    await writeTask(sandbox);
+
+    const result = await spawn(sandbox, '--backend', 'pi');
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain("'pi'");
+    expect(result.stderr).toContain(
+      'npm install -g @earendil-works/pi-coding-agent'
+    );
+    await expect(recordedStdin(sandbox, 'claude')).rejects.toThrow();
   });
 });
 

@@ -7,6 +7,7 @@
  */
 import type { Backend } from '../models.ts';
 import { claude } from './claude.ts';
+import { pi } from './pi.ts';
 
 export type BackendCli = {
   /** The executable looked up on PATH. */
@@ -21,4 +22,4 @@ export type BackendCli = {
   args: (model: string | null) => string[];
 };
 
-export const backends: Partial<Record<Backend, BackendCli>> = { claude };
+export const backends: Partial<Record<Backend, BackendCli>> = { claude, pi };
