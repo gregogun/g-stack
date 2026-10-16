@@ -75,6 +75,8 @@ In a pi subagent started by `gstack spawn` (which sets `GSTACK_SUBAGENT=1`, see 
 
 The extension imports nothing from pi. The few parts of the extension API it uses are typed in the file itself, so it needs no dependencies and no build step.
 
+Install in one scope only. pi loads the extension from both the user and the project directory, and when a command is registered twice it renames both to `/g:1` and `/g:2`, so plain `/g` stops working (`resolveRegisteredCommands` in `dist/core/extensions/runner.js`). Install still installs into a second scope but warns on stderr, naming the other install; remove one with `rm -r` on its `skills/g/` and `extensions/gstack/` (and its `.gstack-manifest.json`).
+
 For the extension to work, `gstack` must be on the `PATH` pi was started with. pi reads a project's `.pi` directory in the directory it was started in, not at the git root, so after `--project`, start pi at the project root.
 
 ### What pi provides

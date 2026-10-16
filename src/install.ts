@@ -32,6 +32,32 @@ export type Adapter = {
   root: (scope: Scope, context: Context) => string;
   /** Every file the install consists of. */
   files: () => Promise<InstallFile[]>;
+  /**
+   * Set when installing in both scopes breaks the harness: why, shown as a
+   * warning when the other scope already has a g-stack install.
+   */
+  oneScopeOnly?: string;
+};
+
+/**
+ * The other scope's install root when it already holds a g-stack install
+ * (a manifest), else null. A root that can't be found counts as none.
+ */
+export const otherScopeInstall = (
+  adapter: Adapter,
+  scope: Scope,
+  context: Context
+): string | null => {
+  let root;
+  let other;
+  try {
+    root = adapter.root(scope, context);
+    other = adapter.root(scope === 'user' ? 'project' : 'user', context);
+  } catch {
+    return null;
+  }
+  if (other === root) return null;
+  return existsSync(path.join(other, MANIFEST)) ? other : null;
 };
 
 type Action = 'create' | 'update' | 'unchanged' | 'remove';

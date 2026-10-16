@@ -254,6 +254,33 @@ describe('gstack install --harness pi', () => {
     ]);
   });
 
+  it.each([
+    ['user', 'project'],
+    ['project', 'user'],
+  ])(
+    'installs into %s but warns when %s already has g-stack, since pi would rename /g',
+    async (first, second) => {
+      const sandbox = await createSandbox();
+      const roots: Record<string, string> = {
+        user: userRoot(sandbox),
+        project: path.join(sandbox.project, '.pi'),
+      };
+      expect((await install(sandbox, `--${first}`)).stderr).toBe('');
+
+      const result = await install(sandbox, `--${second}`, '--json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ scope: second });
+      expect(result.stderr).toContain('warning');
+      expect(result.stderr).toContain(roots[first]);
+      expect(result.stderr).toContain('/g:1');
+      expect(result.stderr).toContain('Install in one scope only');
+      expect(
+        existsSync(path.join(roots[second]!, 'skills', 'g', 'SKILL.md'))
+      ).toBe(true);
+    }
+  );
+
   it('describes every file with --json', async () => {
     const sandbox = await createSandbox();
 

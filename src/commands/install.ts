@@ -5,6 +5,7 @@ import { EXIT, UsageError, type Command } from '../command.ts';
 import {
   InstallError,
   install as runInstall,
+  otherScopeInstall,
   type Adapter,
 } from '../install.ts';
 
@@ -65,6 +66,16 @@ export const install: Command = {
       if (!(error instanceof InstallError)) throw error;
       context.stderr(`gstack: ${error.message}\n`);
       return EXIT.failed;
+    }
+
+    const other =
+      adapter.oneScopeOnly === undefined
+        ? null
+        : otherScopeInstall(adapter, result.scope, context);
+    if (other !== null) {
+      context.stderr(
+        `gstack: warning: g-stack for ${adapter.harness} is also installed in ${other}; ${adapter.oneScopeOnly} Install in one scope only.\n`
+      );
     }
 
     if (json) {

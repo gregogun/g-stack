@@ -70,6 +70,11 @@ export const pi: Adapter = {
     }
     return path.join(HOME, '.pi', 'agent');
   },
+  // pi renames a command registered twice (runner.js,
+  // resolveRegisteredCommands), so with both extensions loaded there is no
+  // plain /g.
+  oneScopeOnly:
+    'pi loads both, and renames the duplicate /g commands to /g:1 and /g:2, so plain /g stops working.',
   files: async () => [
     ...(await layOutRouterSkill({
       at: 'skills/g/',
