@@ -6,9 +6,10 @@ how every verb maps to its harness and what happens when its harness lacks one.
 Content uses no other verb and names no specific harness.
 
 Write a verb as a call in inline code, for example `spawn(explorer, brief)`.
-Inline code that starts with a lowercase word followed by `(` counts as a verb
-call, in prose or in a fenced code block, so `gstack check` rejects a call to
-any word outside this contract.
+Inline code that starts with a word followed by `(` counts as a verb call, as
+does such a line in a fenced code block with no language tag, so `gstack check`
+rejects a call to any word outside this contract. Put code examples in a fenced
+block with a language tag, such as `ts`, and they are left alone.
 
 ## Verbs
 

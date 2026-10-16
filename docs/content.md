@@ -40,9 +40,11 @@ content/roles/synthesizer.md: role 'synthesizer' is missing section REPORT
 
 Every `.md` file under the content directory is checked for:
 
-- **References.** Every relative link (inline or reference-style, outside fenced code) must point at a file that exists inside the content directory. URLs and `#anchor` links are skipped; the anchor of a file link is ignored.
-- **Harness names.** No line may name a harness or a harness-only tool or file: Claude Code, claude, `CLAUDE.md`, pi, Cursor, Codex, opencode, Aider, Gemini, Windsurf, Copilot, TodoWrite, AskUserQuestion. Matching ignores case and whole words only, so "API" is fine.
-- **Verbs.** Inline code starting with a lowercase word and `(`, and any such line in a fenced code block, is a verb call. The word must be `spawn`, `todo`, `ask`, `wake` or `transcript`.
+- **References.** Every relative link (inline or reference-style) must point at a file that exists inside the content directory. Links in fenced code, inline code and HTML comments are skipped, as are URLs and `#anchor` links; the anchor of a file link is ignored. A link that can't be decoded (`50%off.md`) is a broken reference.
+- **Harness names.** No line may name a harness or a harness-only tool or file. Matching is by whole word:
+  - In any case: Claude Code, claude, `CLAUDE.md`, Codex, opencode, Aider, Gemini, Windsurf, Copilot, Cline, Kiro, TodoWrite, AskUserQuestion, `pi-coding-agent`, and the paths `.pi`, `.cursor` and `.cursorrules`.
+  - Capitalised only, because they are also ordinary words: Cursor, Pi, Amp, Roo, Zed. So "a database cursor" and "pi r squared" pass, while "Open it in Cursor" fails. The cost: a sentence starting with one of these words ("Pi is irrational") is flagged; reword it.
+- **Verbs.** Inline code that starts with a word and `(` is a verb call, as is such a line in a fenced code block with no language tag. The word must be `spawn`, `todo`, `ask`, `wake` or `transcript`, spelled in lowercase: `` `Spawn(x)` `` and `` `delegate (task)` `` fail. camelCase calls such as `` `handleRequest()` `` are not verb calls. Code examples go in a fenced block with a language tag (` ```ts `); its lines are never verb calls.
 
 And also:
 
