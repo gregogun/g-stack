@@ -5,7 +5,8 @@ This is a TypeScript repo and uses pnpm as package manager. Node runs the TypeSc
 ## Conventions
 
 - Core content (router, playbooks, skills, roles, principles) never names a specific harness and only uses verbs from the verb contract. Harness specifics live in adapters.
-- Test at the `gstack` CLI boundary: call the CLI with argv, a temporary home directory and project directory, and fake harness binaries on `PATH`. Don't test internal modules directly.
+- Test at the `gstack` CLI boundary: call the CLI with argv, a temporary home directory and project directory, and fake harness binaries on `PATH`. Don't test internal modules directly. `test/helpers.ts` has `createSandbox`, `fakeBin`, `writeFileIn` and `runCli` for this.
+- Each command is a `Command` (`src/command.ts`) in its own file under `src/commands/`, added to the `commands` list in `src/main.ts`. Commands write only through the `Context` they're given and return an exit code; throw `UsageError` or `ConfigError` for exit 2.
 
 ## Checks
 
@@ -15,6 +16,7 @@ Run these before calling work done; CI runs the same set:
 - `pnpm lint`
 - `pnpm types:check`
 - `pnpm knip` (unused files, exports and dependencies; delete rather than ignore)
+- `pnpm test`
 
 The pre-commit hook (lefthook) formats, lints, typechecks and scans staged files for secrets. Don't bypass it with `--no-verify`; fix the finding.
 
