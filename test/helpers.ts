@@ -91,7 +91,7 @@ export type CliResult = {
 type RunCliOptions = {
   /** Directory to run in, relative to the project (default: the project). */
   cwd?: string;
-  /** Extra environment variables, on top of GSTACK_HOME and PATH. */
+  /** Extra environment variables, on top of GSTACK_HOME, HOME and PATH. */
   env?: Record<string, string>;
 };
 
@@ -107,6 +107,9 @@ export const runCli = async (
     cwd: path.join(sandbox.project, options.cwd ?? ''),
     env: {
       GSTACK_HOME: sandbox.home,
+      // Keep anything found under ~ (e.g. harness session files) inside the
+      // sandbox rather than the real home directory.
+      HOME: sandbox.home,
       PATH: [sandbox.bin, '/usr/bin', '/bin'].join(path.delimiter),
       ...options.env,
     },
