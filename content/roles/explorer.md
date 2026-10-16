@@ -18,7 +18,7 @@ The task brief below gives the question, the area to look at and anything alread
 
 ## ACCEPTANCE
 
-- Every claim names the file (and line or symbol where useful) it rests on.
+- Every claim names the file (and line or symbol where useful) it rests on, or the command you ran to see it.
 - Each claim is labelled **measured** (you read or ran it), **inferred** (it follows from what you read) or **guess** (plausible but unchecked).
 - Open questions and anything you could not find are listed, not papered over.
 

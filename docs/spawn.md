@@ -6,7 +6,7 @@
 gstack spawn --role <role> --brief <file> [--backend <backend>] [--model <model>] [--timeout <seconds>]
 ```
 
-- `--role`: a shipped role brief, `content/roles/<role>.md` (for now: `explorer`).
+- `--role`: a shipped role brief, `content/roles/<role>.md` (for now: `explorer` and `synthesizer`).
 - `--brief`: the task brief file, relative to the current directory.
 - `--backend`, `--model`: override [model resolution](config.md). `--model default` passes no model flag.
 - `--timeout`: seconds before the subagent is killed (default 600; fractions allowed).
