@@ -3,7 +3,7 @@
  * <project root>/.gstack/decisions.jsonl. JSON escaping keeps tabs and
  * newlines inside a field from breaking a row. See docs/decision-log.md.
  */
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { EXIT, UsageError, type Command, type Context } from '../command.ts';
@@ -80,6 +80,26 @@ const show = async (json: boolean, context: Context): Promise<number> => {
   return EXIT.ok;
 };
 
+/** Whether `file` exists, is non-empty and doesn't end with a newline. */
+const lacksFinalNewline = async (file: string): Promise<boolean> => {
+  let handle;
+  try {
+    handle = await open(file, 'r');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  try {
+    const { size } = await handle.stat();
+    if (size === 0) return false;
+    const last = Buffer.alloc(1);
+    await handle.read(last, 0, 1, size - 1);
+    return last.toString() !== '\n';
+  } finally {
+    await handle.close();
+  }
+};
+
 const append = async (
   values: Partial<Record<Field, string>>,
   context: Context
@@ -99,8 +119,10 @@ const append = async (
   };
   const file = logFile(context);
   await mkdir(path.dirname(file), { recursive: true });
+  // A hand edit may have dropped the final newline; don't glue onto it.
+  const lead = (await lacksFinalNewline(file)) ? '\n' : '';
   // One write per row so concurrent appends don't interleave mid-row.
-  await appendFile(file, `${JSON.stringify(row)}\n`);
+  await appendFile(file, `${lead}${JSON.stringify(row)}\n`);
   return EXIT.ok;
 };
 
