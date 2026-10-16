@@ -1,5 +1,8 @@
+import { spawn as spawnProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   createSandbox,
@@ -483,6 +486,138 @@ describe('gstack spawn report', () => {
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.stdout)).toMatchObject({ status: 'timeout' });
   }, 10_000);
+});
+
+describe('gstack spawn environment', () => {
+  it.each(['claude', 'pi'] as const)(
+    'runs the %s backend with gstack’s environment plus GSTACK_SUBAGENT=1',
+    async (backend) => {
+      const sandbox = await createSandbox();
+      await fakeAgent(sandbox, backend, 'echo "$GSTACK_SUBAGENT $HOME $EXTRA"');
+      await writeTask(sandbox);
+
+      const result = await runCli(
+        [
+          'spawn',
+          '--role',
+          'explorer',
+          '--brief',
+          'task.md',
+          '--backend',
+          backend,
+        ],
+        sandbox,
+        { env: { EXTRA: 'kept' } }
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        output: `1 ${sandbox.home} kept`,
+      });
+    }
+  );
+
+  it('refuses to run inside a subagent (GSTACK_SUBAGENT set) and exits 2', async () => {
+    const sandbox = await createSandbox();
+    await fakeAgent(sandbox, 'claude');
+    await writeTask(sandbox);
+
+    const result = await runCli(
+      ['spawn', '--role', 'explorer', '--brief', 'task.md'],
+      sandbox,
+      { env: { GSTACK_SUBAGENT: '1' } }
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('already inside a g-stack subagent');
+    expect(existsSync(path.join(sandbox.home, 'claude-args'))).toBe(false);
+  });
+});
+
+/** Whether a process with this pid is still running. */
+const isRunning = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const waitFor = async (check: () => boolean, ms = 5000) => {
+  const deadline = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error('timed out waiting');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+};
+
+describe('gstack spawn stopped by a signal', () => {
+  // Signals need a real gstack process, so this runs the CLI as one (with
+  // the same sandboxed environment runCli gives it).
+  it.each([
+    ['SIGTERM', 143],
+    ['SIGINT', 130],
+    ['SIGHUP', 129],
+  ] as const)(
+    'stops the backend and everything it started on %s, then exits %i',
+    async (signal, code) => {
+      const sandbox = await createSandbox();
+      const pidFile = path.join(sandbox.home, 'sleep-pid');
+      await fakeBin(
+        sandbox,
+        'claude',
+        `cat > /dev/null\nsleep 30 &\necho $! > '${pidFile}'\nwait`
+      );
+      await writeTask(sandbox);
+      const gstack = spawnProcess(
+        process.execPath,
+        [
+          fileURLToPath(new URL('../src/cli.ts', import.meta.url)),
+          'spawn',
+          '--role',
+          'explorer',
+          '--brief',
+          'task.md',
+        ],
+        {
+          cwd: sandbox.project,
+          env: {
+            GSTACK_HOME: sandbox.home,
+            HOME: sandbox.home,
+            PATH: [sandbox.bin, '/usr/bin', '/bin'].join(path.delimiter),
+          },
+          stdio: 'ignore',
+        }
+      );
+      const exited = new Promise<number | null>((resolve) =>
+        gstack.on('exit', (exitCode) => resolve(exitCode))
+      );
+      // The file exists before echo has written the pid; wait for the line.
+      let pid = '';
+      await waitFor(() => {
+        pid = existsSync(pidFile) ? readFileSync(pidFile, 'utf8') : '';
+        return pid.endsWith('\n');
+      });
+      const backend = Number(pid);
+      try {
+        expect(isRunning(backend)).toBe(true);
+
+        gstack.kill(signal);
+
+        expect(await exited).toBe(code);
+        await waitFor(() => !isRunning(backend), 1000);
+      } finally {
+        // Don't leave the sleep (or gstack) running if an assertion failed.
+        if (isRunning(backend)) process.kill(backend, 'SIGKILL');
+        if (gstack.exitCode === null && gstack.signalCode === null) {
+          gstack.kill('SIGKILL');
+        }
+      }
+    },
+    15_000
+  );
 });
 
 describe('gstack spawn errors', () => {

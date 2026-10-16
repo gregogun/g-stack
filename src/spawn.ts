@@ -10,9 +10,14 @@ export type RunResult = {
   durationMs: number;
   /** The backend's stdout, without trailing whitespace. */
   output: string;
+  /**
+   * Set when gstack was asked to stop (`context.signal`) while the backend
+   * ran: the reason, a signal name such as `SIGTERM`.
+   */
+  stopped?: string;
 };
 
-/** How long a timed-out child gets after SIGTERM before SIGKILL. */
+/** How long a stopped child gets after SIGTERM before SIGKILL. */
 const KILL_GRACE_MS = 2000;
 
 /** How long to wait for output after the child exits. */
@@ -21,7 +26,9 @@ const CLOSE_GRACE_MS = 200;
 /**
  * Runs `backend` headlessly in `context.cwd` with `prompt` on stdin. The
  * child's stderr is passed through. Past `timeoutMs`, the child's whole
- * process group is killed and the status is `timeout`.
+ * process group is killed and the status is `timeout`. When
+ * `context.signal` aborts, the whole group is killed too and the result
+ * says `stopped`.
  */
 export const runBackend = (
   backend: BackendCli,
@@ -35,7 +42,9 @@ export const runBackend = (
     // Its own process group, so a timeout kills anything it started too.
     const child = spawn(backend.executable, backend.args(model), {
       cwd: context.cwd,
-      env: context.env,
+      // Marks the run as a subagent: gstack spawn refuses to run inside one,
+      // so subagents can't fan out again.
+      env: { ...context.env, GSTACK_SUBAGENT: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: true,
     });
@@ -66,13 +75,30 @@ export const runBackend = (
       timers.add(timer);
       return timer;
     };
+    // SIGTERM to the group now, SIGKILL to whatever is left after the grace
+    // period, then resolve even if the child never reports its exit.
+    const stopGroup = () => {
+      killGroup('SIGTERM');
+      after(KILL_GRACE_MS, () => {
+        killGroup('SIGKILL');
+        after(CLOSE_GRACE_MS, settle);
+      });
+    };
+
     let settled = false;
     let timedOut = false;
+    let stopped: string | undefined;
     let exitCode: number | null = null;
-    const settle = () => {
-      if (settled) return;
+    const finish = () => {
       settled = true;
       timers.forEach(clearTimeout);
+      context.signal?.removeEventListener('abort', onAbort);
+    };
+    const settle = () => {
+      if (settled) return;
+      finish();
+      // Stopped: leave nothing it started behind.
+      if (stopped !== undefined) killGroup('SIGKILL');
       // A grandchild may still hold the pipes open; stop waiting for it.
       child.stdout.destroy();
       child.stderr.destroy();
@@ -80,23 +106,31 @@ export const runBackend = (
         status: timedOut ? 'timeout' : exitCode === 0 ? 'ok' : 'failed',
         durationMs: Math.round(performance.now() - started),
         output: stdout.trimEnd(),
+        ...(stopped === undefined ? {} : { stopped }),
       });
     };
 
+    // gstack itself was asked to stop (pi aborting the spawn tool sends
+    // SIGTERM to gstack only): take the backend's group down with it rather
+    // than leave it running unparented.
+    function onAbort() {
+      if (settled || stopped !== undefined) return;
+      stopped = String(context.signal?.reason ?? 'SIGTERM');
+      clearTimeout(timeout);
+      stopGroup();
+    }
+
     const timeout = after(timeoutMs, () => {
       timedOut = true;
-      killGroup('SIGTERM');
-      after(KILL_GRACE_MS, () => {
-        killGroup('SIGKILL');
-        // Resolve even if the child never reports its exit.
-        after(CLOSE_GRACE_MS, settle);
-      });
+      stopGroup();
     });
+
+    if (context.signal?.aborted) onAbort();
+    else context.signal?.addEventListener('abort', onAbort);
 
     child.on('error', (error) => {
       if (settled) return;
-      settled = true;
-      timers.forEach(clearTimeout);
+      finish();
       reject(error);
     });
     // Settle on exit, not close: a background job the child left behind can

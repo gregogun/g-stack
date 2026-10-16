@@ -4,7 +4,7 @@
 gstack install --harness <name> [--user | --project] [--dry-run] [--json]
 ```
 
-Installs the shipped content into a harness so that `/g` works there. Supported harnesses: `claude-code`.
+Installs the shipped content into a harness so that `/g` works there. Supported harnesses: `claude-code` and `pi`.
 
 - `--user` (the default): install for every project on this machine.
 - `--project`: install into the current project only. The project root is the nearest directory at or above the current one that holds `.git`; without one, it's the current directory.
@@ -56,3 +56,41 @@ Everything installs into one skill directory:
 Content marks every skill except the router `metadata.discoverable: "false"`. Claude Code's nearest frontmatter is `disable-model-invocation: true`. Per the [skills docs](https://code.claude.com/docs/en/skills), it takes the description out of the model's context, but Claude also "can't invoke the skill on its own". If Claude tries anyway, "Claude Code blocks the call and instructs it not to reproduce the [skill's] steps another way". That would stop the router from handing off to a hidden skill.
 
 So the Claude Code adapter doesn't install hidden skills as skills at all. Claude Code discovers skills only at `skills/<name>/SKILL.md`, so a `SKILL.md` nested under `skills/g/` is never listed. The model reads it by path when the router links to it. That is how hidden skills work in core content anyway.
+
+## pi
+
+| Scope     | Install root                                   |
+| --------- | ---------------------------------------------- |
+| `user`    | `$PI_CODING_AGENT_DIR`, else `$HOME/.pi/agent` |
+| `project` | `<project root>/.pi`                           |
+
+The install root is pi's config directory, not a skill directory, because pi looks for skills and extensions in two sibling directories there. A leading `~` in `PI_CODING_AGENT_DIR` is expanded with `HOME`, as pi expands it with the home directory. The manifest sits in the install root and lists only g-stack's files, so pi's own files (`settings.json`, `auth.json`, `sessions/`) and your other skills and extensions are never touched.
+
+- `skills/g/`: laid out as for Claude Code. The router becomes `skills/g/SKILL.md` (pi's `/skill:g`), every other content file is a supporting file beside it, and `adapters/pi/verbs.md` becomes `skills/g/adapter.md`. The installed router gets a note that every linked file lives in the skill's directory and that relative links resolve against the containing file's directory.
+- `extensions/gstack/index.ts`: the g-stack extension, copied from `adapters/pi/extension/index.ts`. pi loads it at startup. It adds:
+  - the `spawn` tool, `{role, brief, model?, timeout?}`. It writes the brief to a temporary file, runs `gstack spawn --role <role> --brief <file> [--model <model>] [--timeout <seconds>]` in the session's directory and returns the JSON report as the tool result. Exit 1 (the subagent failed or timed out) still returns the report. Any other exit, or no report, fails the tool call with gstack's error.
+  - the `/g <task>` command. It sends the installed g skill and the task to the model, the same message `/skill:g <task>` sends. If pi hasn't loaded the g skill, it shows an error instead.
+
+In a pi subagent started by `gstack spawn` (which sets `GSTACK_SUBAGENT=1`, see [spawn](spawn.md)), the extension registers nothing, so subagents can't start the router. `gstack spawn` itself refuses to run there, so they can't fan out again through `bash` either.
+
+The extension imports nothing from pi. The few parts of the extension API it uses are typed in the file itself, so it needs no dependencies and no build step.
+
+Install in one scope only. pi loads the extension from both the user and the project directory, and when a command is registered twice it renames both to `/g:1` and `/g:2`, so plain `/g` stops working (`resolveRegisteredCommands` in `dist/core/extensions/runner.js`). Install still installs into a second scope but warns on stderr, naming the other install; remove one with `rm -r` on its `skills/g/` and `extensions/gstack/` (and its `.gstack-manifest.json`).
+
+Install never writes through a symlink, so if `skills/` or `extensions/` in pi's config directory is a symlink (to dotfiles, say), install refuses and exits 2, naming it.
+
+For the extension to work, `gstack` must be on the `PATH` pi was started with. pi reads a project's `.pi` directory in the directory it was started in, not at the git root, so after `--project`, start pi at the project root.
+
+### What pi provides
+
+Checked against pi 0.74.0 (`@earendil-works/pi-coding-agent`). Docs: [skills](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/skills.md), [extensions](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/extensions.md), [usage](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/usage.md). Source paths below are in the installed package.
+
+- **Config directory.** `~/.pi/agent`, or `PI_CODING_AGENT_DIR` (docs/usage.md; `getAgentDir` in `dist/config.js`).
+- **Skills.** Loaded from `~/.pi/agent/skills/` and `~/.agents/skills/`, and in a project from `.pi/skills/` (the start directory only) and `.agents/skills/` (the start directory and its ancestors up to the git root) (docs/skills.md; `collectSkillEntries` in `dist/core/package-manager.js`). A directory that holds a `SKILL.md` is a skill and pi looks no deeper (`loadSkillsFromDirInternal` in `dist/core/skills.js`), so the hidden skills under `skills/g/skills/` are never listed and the model reads them by path, as with Claude Code. `name` must match the directory and `description` is required. Each skill becomes a `/skill:<name>` command that sends the skill's body wrapped in `<skill name="…" location="…">` with "References are relative to `<dir>`", followed by the arguments (`_expandSkillCommand` in `dist/core/agent-session.js`).
+- **Extensions.** TypeScript modules loaded with jiti from `~/.pi/agent/extensions/*.ts` or `*/index.ts`, and from the start directory's `.pi/extensions/` (docs/extensions.md; `discoverAndLoadExtensions` in `dist/core/extensions/loader.js`). The default export receives the extension API:
+  - `registerTool` takes a plain JSON Schema as `parameters` (TypeBox is optional; pi validates either). Tool calls in one message run in parallel.
+  - `registerCommand(name, {description, handler})` adds a slash command.
+  - `getCommands()` lists every command, with a skill's `SKILL.md` path in `sourceInfo.path`.
+  - `sendUserMessage` sends text as-is. It doesn't expand `/skill:` commands, which is why `/g` builds the skill message itself.
+  - `exec` runs a command without a shell, in pi's environment (`dist/core/exec.js`).
+- **Verbs.** pi's built-in tools are `read`, `bash`, `edit`, `write`, `grep`, `find` and `ls`. It has no subagent, todo or question tool (only examples of building them). So `spawn` comes from the extension, `todo` is a markdown checklist in the reply, `ask` is a plain message, `wake` isn't mapped, and `transcript` is `gstack transcript` through `bash`. See `adapters/pi/verbs.md`.

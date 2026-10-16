@@ -11,7 +11,7 @@ gstack spawn --role <role> --brief <file> [--backend <backend>] [--model <model>
 - `--backend`, `--model`: override [model resolution](config.md). `--model default` passes no model flag.
 - `--timeout`: seconds before the subagent is killed (default 600; fractions allowed).
 
-The subagent's input, on stdin, is the role brief, a newline, then the task brief, each exactly as in its file. The subagent runs in the current directory with gstack's environment.
+The subagent's input, on stdin, is the role brief, a newline, then the task brief, each exactly as in its file. The subagent runs in the current directory with gstack's environment, plus `GSTACK_SUBAGENT=1` (for every backend). That marks the run as a subagent. `gstack spawn` refuses to run when it is set (exit 2), so a subagent can't fan out again whatever harness it runs in, and harness integrations can stay out of it: the pi extension registers no `spawn` tool and no `/g` command, so a pi subagent can't start the router.
 
 ## Backends
 
@@ -54,4 +54,5 @@ How `pi -p` behaves, as checked against `@earendil-works/pi-coding-agent` 0.74.0
 
 - `0`: the subagent finished (`ok`).
 - `1`: the subagent ran but failed or timed out. The report is still printed.
-- `2`: bad arguments, an unknown role, an unreadable brief, invalid config, or the backend's CLI isn't on `PATH`. Nothing ran, no report is printed, and the error goes to stderr.
+- `2`: bad arguments, an unknown role, an unreadable brief, invalid config, the backend's CLI isn't on `PATH`, or gstack is already running inside a subagent (`GSTACK_SUBAGENT` is set). Nothing ran, no report is printed, and the error goes to stderr.
+- `128 + signal number` (`130` for SIGINT, `143` for SIGTERM, `129` for SIGHUP): gstack was stopped by that signal. It first stops the backend and everything it started (SIGTERM to the backend's process group, then SIGKILL to whatever is left once the backend exits, or after 2 seconds) so no subagent is left running. No report is printed. A second signal exits at once.

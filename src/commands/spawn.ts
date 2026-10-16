@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { backends } from '../backends/index.ts';
@@ -69,6 +70,12 @@ export const spawn: Command = {
     'Run a subagent with a role and task brief; print its report as JSON.',
   run: async (args, context) => {
     const options = parse(args);
+    // runBackend marks every subagent with GSTACK_SUBAGENT; one level only.
+    if (context.env.GSTACK_SUBAGENT) {
+      throw new ConfigError(
+        "already inside a g-stack subagent (GSTACK_SUBAGENT is set); subagents can't spawn more subagents, so do the work yourself"
+      );
+    }
 
     const roleBrief = await readRoleBrief(options.role);
     const briefFile = path.resolve(context.cwd, options.brief);
@@ -114,6 +121,12 @@ export const spawn: Command = {
     } catch (error) {
       throw new ConfigError(
         `could not start the '${backend.executable}' CLI: ${(error as Error).message}`
+      );
+    }
+    // Stopped by a signal: no report, exit as if killed by it.
+    if (result.stopped !== undefined) {
+      return (
+        128 + (os.constants.signals[result.stopped as NodeJS.Signals] ?? 15)
       );
     }
     const report = {
