@@ -1,8 +1,9 @@
 /**
  * Shared helpers for testing at the `gstack` CLI boundary.
  *
- * A test makes a sandbox (a temp g-stack home, a temp project directory and
- * an empty temp bin directory that is the whole of PATH), optionally puts
+ * A test makes a sandbox (a temp g-stack home, a temp project directory that
+ * is a git root, and an empty temp bin directory that comes first on PATH,
+ * followed only by the system /usr/bin and /bin), optionally puts
  * fake executables in the bin directory and files in the home or project,
  * then runs the CLI in-process with `runCli` and checks the exit code,
  * stdout, stderr and the files left behind.
@@ -22,7 +23,10 @@ export type Sandbox = {
   home: string;
   /** The project directory; the CLI runs here unless `cwd` says otherwise. */
   project: string;
-  /** The only directory on PATH. Starts empty; add fakes with `fakeBin`. */
+  /**
+   * First on PATH, before only /usr/bin and /bin (so fakes can use system
+   * tools like cat and env). Starts empty; add fakes with `fakeBin`.
+   */
   bin: string;
 };
 
@@ -46,6 +50,9 @@ export const createSandbox = async (): Promise<Sandbox> => {
   await Promise.all(
     Object.values(sandbox).map((dir) => mkdir(dir, { recursive: true }))
   );
+  // Make the project a git root so config lookup never climbs out of the
+  // sandbox into the real machine.
+  await mkdir(path.join(sandbox.project, '.git'));
   return sandbox;
 };
 
@@ -98,7 +105,11 @@ export const runCli = async (
   let stderr = '';
   const exitCode = await main(argv, {
     cwd: path.join(sandbox.project, options.cwd ?? ''),
-    env: { GSTACK_HOME: sandbox.home, PATH: sandbox.bin, ...options.env },
+    env: {
+      GSTACK_HOME: sandbox.home,
+      PATH: [sandbox.bin, '/usr/bin', '/bin'].join(path.delimiter),
+      ...options.env,
+    },
     stdout: (text) => {
       stdout += text;
     },
