@@ -8,7 +8,15 @@
  * re-install can update and remove them and never touches anything else.
  */
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  rmdir,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { ConfigError, type Context } from './command.ts';
 
@@ -57,9 +65,11 @@ const NOT_A_FILE = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
 
 /**
  * Rewrites the relative links in `text` (the content file `from`) so they
- * still point at the same files once every file `f` is installed at
- * `place(f)`. Links in fenced or inline code, URLs, anchors, and links to
- * files that aren't installed are left as they are.
+ * still point at the same files once every content file `f` is installed
+ * at `place(f)`. URLs, anchors, links in fenced or inline code, and links
+ * whose target `place` leaves out (null) or that can't be decoded are left
+ * as they are. Whether the target exists isn't checked; `gstack check` does
+ * that on the content.
  */
 const rewriteLinks = (
   text: string,
@@ -146,36 +156,102 @@ export const layOutContent = async (
   return files;
 };
 
-const readManifest = async (root: string): Promise<string[]> => {
+/**
+ * A manifest entry as a clean relative path (`./a//b` -> `a/b`), or null
+ * when it is empty or leaves the root.
+ */
+const normalizeEntry = (entry: string): string | null => {
+  const normal = path.posix.normalize(entry.replaceAll('\\', '/'));
+  if (
+    normal === '.' ||
+    normal === MANIFEST ||
+    path.posix.isAbsolute(normal) ||
+    normal.split('/').includes('..')
+  ) {
+    return null;
+  }
+  return normal;
+};
+
+const readManifest = async (root: string): Promise<Set<string>> => {
   const file = path.join(root, MANIFEST);
-  if (!existsSync(file)) return [];
+  if (!existsSync(file)) return new Set();
   try {
     const parsed = JSON.parse(await readFile(file, 'utf8')) as unknown;
-    const files = (parsed as { files?: unknown }).files;
+    const files = (parsed as { files?: unknown } | null)?.files;
     if (Array.isArray(files) && files.every((f) => typeof f === 'string')) {
-      return files as string[];
+      return new Set(
+        files.map(normalizeEntry).filter((f): f is string => f !== null)
+      );
     }
   } catch {
     // Fall through to the error below.
   }
   throw new ConfigError(
-    `invalid install manifest ${file}: expected {"files": [...]}`
+    `invalid install manifest ${file}: expected {"files": [...]}; fix or delete it`
   );
 };
 
-const readIfExists = async (file: string): Promise<string | null> =>
-  existsSync(file) ? readFile(file, 'utf8') : null;
+/** The kind of thing at `file`, without following a final symlink. */
+const kindOf = async (
+  file: string
+): Promise<'missing' | 'file' | 'symlink' | 'other'> => {
+  try {
+    const stats = await lstat(file);
+    if (stats.isSymbolicLink()) return 'symlink';
+    return stats.isFile() ? 'file' : 'other';
+  } catch {
+    return 'missing';
+  }
+};
 
-/** Whether `relative` stays inside the directory it is relative to. */
-const staysInside = (relative: string): boolean =>
-  !path.isAbsolute(relative) &&
-  !relative.split(/[\\/]/).includes('..') &&
-  relative !== '';
+/**
+ * Refuses (ConfigError) when `relative` is reached through a symlink below
+ * `root`, or names something other than a regular file.
+ */
+const assertPlainPath = async (root: string, relative: string) => {
+  const parts = relative.split('/');
+  for (let index = 1; index <= parts.length; index += 1) {
+    const at = path.join(root, ...parts.slice(0, index));
+    const kind = await kindOf(at);
+    if (kind === 'missing') return;
+    if (kind === 'symlink') {
+      throw new ConfigError(
+        `${at} is a symlink; install won't write or delete through it`
+      );
+    }
+    if (index === parts.length && kind !== 'file') {
+      throw new ConfigError(`${at} exists and is not a regular file`);
+    }
+  }
+};
+
+/** Removes empty directories from `dir` up to, but not including, `root`. */
+const pruneEmptyDirs = async (root: string, dir: string) => {
+  for (let at = dir; at !== root && at.startsWith(root);) {
+    try {
+      await rmdir(at);
+    } catch {
+      return;
+    }
+    at = path.dirname(at);
+  }
+};
+
+/** A write failed partway through an install (exit 1). */
+export class InstallError extends Error {
+  override name = 'InstallError';
+}
+
+const manifestText = (harness: string, files: Iterable<string>) =>
+  `${JSON.stringify({ harness, files: [...files].sort() }, null, 2)}\n`;
 
 /**
  * Installs `adapter`'s files for `scope`. Writes nothing when `dryRun`, and
- * nothing at all when any file it would write exists without g-stack having
- * written it (a ConfigError naming the file).
+ * nothing at all (a ConfigError) when a file it would write exists without
+ * g-stack having written it, or is reached through a symlink. A write that
+ * fails partway is an InstallError; the manifest then lists what g-stack
+ * owns so far.
  */
 export const install = async (
   adapter: Adapter,
@@ -185,12 +261,13 @@ export const install = async (
 ): Promise<InstallResult> => {
   const root = adapter.root(scope, context);
   const files = await adapter.files();
-  const owned = new Set(await readManifest(root));
+  const owned = await readManifest(root);
 
   const planned: { file: InstallFile; action: Action }[] = [];
   for (const file of files) {
+    await assertPlainPath(root, file.path);
     const target = path.join(root, file.path);
-    const existing = await readIfExists(target);
+    const existing = existsSync(target) ? await readFile(target, 'utf8') : null;
     if (existing === null) {
       planned.push({ file, action: 'create' });
     } else if (existing === file.text) {
@@ -203,27 +280,54 @@ export const install = async (
       );
     }
   }
+
+  // Never remove an entry that may name a shipped file: compared without
+  // case, since macOS file systems usually ignore it.
   const shipped = new Set(files.map((file) => file.path));
-  const removed = [...owned]
-    .filter((file) => !shipped.has(file) && staysInside(file))
-    .filter((file) => existsSync(path.join(root, file)))
-    .sort();
+  const shippedFolded = new Set([...shipped].map((f) => f.toLowerCase()));
+  const removed: string[] = [];
+  for (const file of [...owned].sort()) {
+    if (shippedFolded.has(file.toLowerCase())) continue;
+    await assertPlainPath(root, file);
+    if (existsSync(path.join(root, file))) removed.push(file);
+  }
 
   if (!dryRun) {
-    for (const { file, action } of planned) {
-      if (action !== 'create' && action !== 'update') continue;
-      const target = path.join(root, file.path);
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, file.text);
+    const nowOwned = new Set(owned);
+    try {
+      for (const { file, action } of planned) {
+        if (action !== 'create' && action !== 'update') continue;
+        const target = path.join(root, file.path);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, file.text);
+        nowOwned.add(file.path);
+      }
+      for (const file of removed) {
+        const target = path.join(root, file);
+        await rm(target, { force: true });
+        nowOwned.delete(file);
+        await pruneEmptyDirs(root, path.dirname(target));
+      }
+    } catch (error) {
+      try {
+        await mkdir(root, { recursive: true });
+        await writeFile(
+          path.join(root, MANIFEST),
+          manifestText(adapter.harness, nowOwned)
+        );
+      } catch {
+        // The original error is the one to report.
+      }
+      throw new InstallError(
+        `install failed partway: ${(error as Error).message}`
+      );
     }
-    for (const file of removed) await rm(path.join(root, file));
-    const manifest = `${JSON.stringify(
-      { harness: adapter.harness, files: [...shipped].sort() },
-      null,
-      2
-    )}\n`;
+    const manifest = manifestText(adapter.harness, shipped);
     const manifestFile = path.join(root, MANIFEST);
-    if ((await readIfExists(manifestFile)) !== manifest) {
+    const current = existsSync(manifestFile)
+      ? await readFile(manifestFile, 'utf8')
+      : null;
+    if (current !== manifest) {
       await mkdir(root, { recursive: true });
       await writeFile(manifestFile, manifest);
     }

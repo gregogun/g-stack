@@ -1,5 +1,13 @@
 import { existsSync } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createSandbox, runCli, writeFileIn, type Sandbox } from './helpers.ts';
@@ -221,6 +229,7 @@ describe('gstack install --harness claude-code', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/remove\s+playbooks\/old\.md/);
     expect(existsSync(path.join(g, 'playbooks', 'old.md'))).toBe(false);
+    expect(existsSync(path.join(g, 'playbooks'))).toBe(false);
   });
 
   it('refuses to overwrite a file it did not write', async () => {
@@ -260,6 +269,113 @@ describe('gstack install --harness claude-code', () => {
       path: path.join(g, 'adapter.md'),
       action: 'create',
     });
+  });
+
+  it('tells the model where the installed files are', async () => {
+    const sandbox = await createSandbox();
+    await install(sandbox);
+
+    const router = await readFile(
+      path.join(userSkills(sandbox), 'g', 'SKILL.md'),
+      'utf8'
+    );
+
+    expect(router).toContain('`${CLAUDE_SKILL_DIR}`');
+  });
+});
+
+/** Rewrites the user install's manifest file list with `edit`. */
+const editManifest = async (
+  sandbox: Sandbox,
+  edit: (files: string[]) => string[]
+) => {
+  const g = path.join(userSkills(sandbox), 'g');
+  const file = path.join(g, '.gstack-manifest.json');
+  const manifest = JSON.parse(await readFile(file, 'utf8')) as {
+    files: string[];
+  };
+  manifest.files = edit(manifest.files);
+  await writeFileIn(g, '.gstack-manifest.json', JSON.stringify(manifest));
+};
+
+describe('gstack install over an unusual install directory', () => {
+  it('keeps shipped files that stale manifest entries also name', async () => {
+    const sandbox = await createSandbox();
+    await install(sandbox);
+    await editManifest(sandbox, (files) => [
+      ...files,
+      './SKILL.md',
+      'skill.MD',
+      'roles//explorer.md',
+      'ROLES/EXPLORER.md',
+    ]);
+
+    const result = await install(sandbox);
+
+    expect(result.stderr).toBe('');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(' 0 removed');
+    const g = path.join(userSkills(sandbox), 'g');
+    expect(existsSync(path.join(g, 'SKILL.md'))).toBe(true);
+    expect(existsSync(path.join(g, 'roles', 'explorer.md'))).toBe(true);
+    expect((await install(sandbox)).stdout).toMatch(
+      /0 written, 0 removed, \d+ unchanged/
+    );
+  });
+
+  it('exits 2 on a corrupt manifest without writing', async () => {
+    const sandbox = await createSandbox();
+    const g = path.join(userSkills(sandbox), 'g');
+    await writeFileIn(g, '.gstack-manifest.json', '{not json');
+
+    const result = await install(sandbox);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain(path.join(g, '.gstack-manifest.json'));
+    expect(existsSync(path.join(g, 'SKILL.md'))).toBe(false);
+  });
+
+  it('refuses to write through a symlink inside the install', async () => {
+    const sandbox = await createSandbox();
+    await install(sandbox);
+    const g = path.join(userSkills(sandbox), 'g');
+    const outside = path.join(sandbox.home, 'elsewhere');
+    await mkdir(outside);
+    await writeFileIn(outside, 'explorer.md', 'not yours\n');
+    await rm(path.join(g, 'roles'), { recursive: true });
+    await symlink(outside, path.join(g, 'roles'));
+
+    const result = await install(sandbox);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('symlink');
+    expect(await readFile(path.join(outside, 'explorer.md'), 'utf8')).toBe(
+      'not yours\n'
+    );
+  });
+
+  it('exits 1 with a one-line error when a write fails, keeping ownership', async () => {
+    const sandbox = await createSandbox();
+    await install(sandbox);
+    const g = path.join(userSkills(sandbox), 'g');
+    await writeFileIn(g, 'HARNESS.md', 'old\n');
+    await writeFileIn(g, 'SKILL.md', 'old\n');
+    await chmod(path.join(g, 'SKILL.md'), 0o444);
+
+    const result = await install(sandbox);
+    await chmod(path.join(g, 'SKILL.md'), 0o644);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/^gstack: install failed partway: .+\n$/);
+    const manifest = await readFile(
+      path.join(g, '.gstack-manifest.json'),
+      'utf8'
+    );
+    expect(manifest).toContain('"SKILL.md"');
+    expect(manifest).toContain('"HARNESS.md"');
+    // The next run still owns the file and finishes the job.
+    expect((await install(sandbox)).exitCode).toBe(0);
+    expect(await readFile(path.join(g, 'SKILL.md'), 'utf8')).toMatch(/^---/);
   });
 });
 
