@@ -5,12 +5,12 @@
  * ($GSTACK_HOME/config.json), overridden by repo config
  * (<project root>/.gstack/config.json). See docs/config.md.
  */
-import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { ConfigError, type Context } from './command.ts';
 import { isOnPath } from './executables.ts';
+import { projectRoot } from './project.ts';
 
 const BACKENDS = ['pi', 'claude'] as const;
 type Backend = (typeof BACKENDS)[number];
@@ -33,14 +33,6 @@ export type Resolved = {
 /** g-stack's home directory: GSTACK_HOME, else ~/.gstack. */
 const gstackHome = (env: Context['env']): string =>
   env.GSTACK_HOME || path.join(env.HOME || homedir(), '.gstack');
-
-/** The nearest ancestor of `cwd` holding .git, else `cwd` itself. */
-const projectRoot = (cwd: string): string => {
-  for (let dir = cwd; ; dir = path.dirname(dir)) {
-    if (existsSync(path.join(dir, '.git'))) return dir;
-    if (path.dirname(dir) === dir) return cwd;
-  }
-};
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
