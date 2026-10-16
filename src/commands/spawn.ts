@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { backends } from '../backends/index.ts';
@@ -114,6 +115,12 @@ export const spawn: Command = {
     } catch (error) {
       throw new ConfigError(
         `could not start the '${backend.executable}' CLI: ${(error as Error).message}`
+      );
+    }
+    // Stopped by a signal: no report, exit as if killed by it.
+    if (result.stopped !== undefined) {
+      return (
+        128 + (os.constants.signals[result.stopped as NodeJS.Signals] ?? 15)
       );
     }
     const report = {

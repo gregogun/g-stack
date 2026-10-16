@@ -11,6 +11,11 @@ export type Context = {
   env: Record<string, string | undefined>;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
+  /**
+   * Aborted when gstack is asked to stop (SIGINT, SIGTERM or SIGHUP); the
+   * reason is the signal's name.
+   */
+  signal?: AbortSignal;
 };
 
 export type Command = {
