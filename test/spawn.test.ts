@@ -439,6 +439,35 @@ describe('gstack spawn report', () => {
     });
   }, 10_000);
 
+  it('reports ok when claude exits just before --timeout while a background job holds stdout', async () => {
+    const sandbox = await createSandbox();
+    await fakeBin(sandbox, 'claude', '(sleep 3) &\nsleep 0.3\necho done');
+    await writeTask(sandbox);
+
+    // Process startup time varies by machine, so first measure when the
+    // child exits: with stdout held open, the report comes 200ms after. The
+    // first run is slower than the rest, so measure the second.
+    await spawn(sandbox, '--timeout', '5');
+    const calibration = await spawn(sandbox, '--timeout', '5');
+    const { durationMs } = JSON.parse(calibration.stdout) as {
+      durationMs: number;
+    };
+    const exitMs = durationMs - 200;
+
+    // Then time out 100ms after that exit, while spawn still waits for output.
+    const result = await spawn(
+      sandbox,
+      '--timeout',
+      String((exitMs + 100) / 1000)
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: 'ok',
+      output: 'done',
+    });
+  }, 10_000);
+
   it('reports timeout close to --timeout even when a grandchild escapes the process group', async () => {
     const sandbox = await createSandbox();
     await fakeClaude(

@@ -61,8 +61,10 @@ export const runBackend = (
     };
 
     const timers = new Set<NodeJS.Timeout>();
-    const after = (ms: number, fn: () => void) => {
-      timers.add(setTimeout(fn, ms));
+    const after = (ms: number, fn: () => void): NodeJS.Timeout => {
+      const timer = setTimeout(fn, ms);
+      timers.add(timer);
+      return timer;
     };
     let settled = false;
     let timedOut = false;
@@ -81,7 +83,7 @@ export const runBackend = (
       });
     };
 
-    after(timeoutMs, () => {
+    const timeout = after(timeoutMs, () => {
       timedOut = true;
       killGroup('SIGTERM');
       after(KILL_GRACE_MS, () => {
@@ -102,6 +104,8 @@ export const runBackend = (
     // collect the last output, then stop waiting.
     child.on('exit', (code) => {
       exitCode = code;
+      // It finished in time; don't let the timeout fire while waiting.
+      clearTimeout(timeout);
       after(CLOSE_GRACE_MS, settle);
     });
     child.on('close', settle);
