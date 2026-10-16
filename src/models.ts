@@ -12,11 +12,11 @@ import { ConfigError, type Context } from './command.ts';
 import { isOnPath } from './executables.ts';
 import { projectRoot } from './project.ts';
 
-const BACKENDS = ['pi', 'claude'] as const;
-type Backend = (typeof BACKENDS)[number];
+export const BACKENDS = ['pi', 'claude'] as const;
+export type Backend = (typeof BACKENDS)[number];
 
 /** The model value meaning "pass no model flag; use the backend's default". */
-const DEFAULT_MODEL = 'default';
+export const DEFAULT_MODEL = 'default';
 
 const BUILT_IN_ROLES = ['explorer', 'synthesizer', 'investigator'];
 
