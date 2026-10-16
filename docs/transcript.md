@@ -55,6 +55,7 @@ The current directory must be the one the harness was started in; a subdirectory
 }
 ```
 
+- `sessionId` is the id in the file's name (what `--session` looks up), or the id inside the file if the name has none.
 - `turns` are in conversation order. `role` is `user`, `assistant` or `tool`.
 - An assistant turn's `toolCalls` lists each call with the harness's own tool name and input. Each result is a later `tool` turn whose `toolCallId` matches.
 - `text` joins a message's text blocks with newlines. Images become `[image]`. Thinking is left out.
@@ -71,6 +72,6 @@ What each harness's file contributes:
 Exit 1, with the message on stderr:
 
 - no session for the current directory, or none with the given id
-- a file that can't be read or parsed; the message names the file (and the line, for invalid JSON)
+- a file that can't be read or parsed; the message names the file (and the line, for invalid JSON). A last line with no newline after it is one the harness is still writing, so it is skipped rather than reported.
 
 Exit 2 for bad usage: an unknown harness, or both `--file` and `--session`.

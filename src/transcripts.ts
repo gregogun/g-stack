@@ -39,13 +39,17 @@ const readEntries = async (file: string): Promise<Entry[]> => {
     );
   }
   const entries: Entry[] = [];
-  for (const [index, raw] of text.split('\n').entries()) {
+  const lines = text.split('\n');
+  for (const [index, raw] of lines.entries()) {
     if (raw.trim() === '') continue;
     const line = index + 1;
     let value: unknown;
     try {
       value = JSON.parse(raw);
     } catch (error) {
+      // A last line with no newline after it is one the harness is still
+      // writing (the newest session is usually live); skip it.
+      if (index === lines.length - 1) break;
       throw new TranscriptError(
         `${file}:${line}: not valid JSON (${(error as Error).message})`
       );
@@ -71,8 +75,12 @@ const readSession = async (
     );
   }
   try {
-    const { sessionId, turns } = chosen.parse(entries);
-    return { harness: chosen.harness, sessionId, file, turns };
+    const parsed = chosen.parse(entries);
+    // Prefer the id in the file name: it is what `--session` looks up, and a
+    // resumed session's file can hold older lines with another id.
+    const sessionId =
+      chosen.idFromFileName(path.basename(file)) ?? parsed.sessionId;
+    return { harness: chosen.harness, sessionId, file, turns: parsed.turns };
   } catch (error) {
     if (!(error instanceof MalformedEntry)) throw error;
     throw new TranscriptError(
