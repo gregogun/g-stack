@@ -220,16 +220,16 @@ describe('gstack install --harness claude-code', () => {
     const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as {
       files: string[];
     };
-    manifest.files.push('playbooks/old.md');
+    manifest.files.push('retired/old.md');
     await writeFileIn(g, '.gstack-manifest.json', JSON.stringify(manifest));
-    await writeFileIn(g, 'playbooks/old.md', 'retired\n');
+    await writeFileIn(g, 'retired/old.md', 'retired\n');
 
     const result = await install(sandbox);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toMatch(/remove\s+playbooks\/old\.md/);
-    expect(existsSync(path.join(g, 'playbooks', 'old.md'))).toBe(false);
-    expect(existsSync(path.join(g, 'playbooks'))).toBe(false);
+    expect(result.stdout).toMatch(/remove\s+retired\/old\.md/);
+    expect(existsSync(path.join(g, 'retired', 'old.md'))).toBe(false);
+    expect(existsSync(path.join(g, 'retired'))).toBe(false);
   });
 
   it('refuses to overwrite a file it did not write', async () => {
