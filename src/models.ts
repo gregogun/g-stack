@@ -104,7 +104,9 @@ const loadConfig = async (file: string): Promise<Config> => {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
       return { roles: {} };
-    throw error;
+    throw new ConfigError(
+      `cannot read config ${file}: ${(error as Error).message}`
+    );
   }
   let raw: unknown;
   try {
