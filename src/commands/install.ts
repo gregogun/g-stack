@@ -1,7 +1,11 @@
 import { parseArgs } from 'node:util';
 import { claudeCode } from '../adapters/claude-code.ts';
 import { EXIT, UsageError, type Command } from '../command.ts';
-import { install as runInstall, type Adapter } from '../install.ts';
+import {
+  InstallError,
+  install as runInstall,
+  type Adapter,
+} from '../install.ts';
 
 /** Every supported harness. To add one, append its adapter here. */
 const adapters: Adapter[] = [claudeCode];
@@ -48,12 +52,19 @@ export const install: Command = {
       throw new UsageError('pass --user or --project, not both');
     }
 
-    const result = await runInstall(
-      adapter,
-      project ? 'project' : 'user',
-      context,
-      dryRun
-    );
+    let result;
+    try {
+      result = await runInstall(
+        adapter,
+        project ? 'project' : 'user',
+        context,
+        dryRun
+      );
+    } catch (error) {
+      if (!(error instanceof InstallError)) throw error;
+      context.stderr(`gstack: ${error.message}\n`);
+      return EXIT.failed;
+    }
 
     if (json) {
       context.stdout(`${JSON.stringify(result)}\n`);
