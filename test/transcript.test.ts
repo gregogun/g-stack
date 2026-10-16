@@ -303,6 +303,58 @@ describe('gstack transcript session selection', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("no session with id 'nope'");
   });
+
+  it('reports the id a resumed Claude Code session can be selected by', async () => {
+    const sandbox = await createSandbox();
+    const resumedId = '9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a';
+    // A resumed session's file starts with lines carrying the old id.
+    const olderId = '00000000-1111-4222-8333-444444444444';
+    await claudeSession(
+      sandbox,
+      resumedId,
+      (await fixture('claude-code.jsonl')).replaceAll(CLAUDE_ID, olderId)
+    );
+
+    const latest = await transcript(sandbox, []);
+    expect(latest).toMatchObject({ sessionId: resumedId });
+    expect(
+      await transcript(sandbox, ['--session', latest.sessionId as string])
+    ).toMatchObject({ sessionId: resumedId });
+  });
+});
+
+describe('gstack transcript with a session still being written', () => {
+  /** The fixture with its last ~60 bytes (and final newline) cut off. */
+  const halfWritten = async (name: string) => {
+    const full = await fixture(name);
+    return full.slice(0, full.length - 60);
+  };
+
+  it('ignores a half-written last line in a Claude Code session', async () => {
+    const sandbox = await createSandbox();
+    const whole = await transcript(sandbox, [
+      '--file',
+      await claudeSession(sandbox),
+    ]);
+    await claudeSession(
+      sandbox,
+      CLAUDE_ID,
+      await halfWritten('claude-code.jsonl')
+    );
+
+    expect(await transcript(sandbox, [])).toEqual(whole);
+  });
+
+  it('ignores a half-written last line in a pi session', async () => {
+    const sandbox = await createSandbox();
+    const whole = await transcript(sandbox, [
+      '--file',
+      await piSession(sandbox),
+    ]);
+    await piSession(sandbox, PI_ID, await halfWritten('pi.jsonl'));
+
+    expect(await transcript(sandbox, [])).toEqual(whole);
+  });
 });
 
 describe('gstack transcript with a file it cannot parse', () => {
@@ -326,6 +378,23 @@ describe('gstack transcript with a file it cannot parse', () => {
     const file = await claudeSession(sandbox, CLAUDE_ID, `${good}{ nope\n`);
 
     await expectParseError(sandbox, [], `${file}:15`, 'not valid JSON');
+  });
+
+  it('names the line of invalid JSON before the last line', async () => {
+    const sandbox = await createSandbox();
+    const lines = (await fixture('pi.jsonl')).split('\n');
+    lines[3] = '{ nope';
+    const file = await piSession(sandbox, PI_ID, lines.join('\n'));
+
+    await expectParseError(sandbox, [], `${file}:4`, 'not valid JSON');
+  });
+
+  it('names a last line of invalid JSON that is complete', async () => {
+    const sandbox = await createSandbox();
+    const good = await fixture('pi.jsonl');
+    const file = await piSession(sandbox, PI_ID, `${good}{ nope\n`);
+
+    await expectParseError(sandbox, [], `${file}:14`, 'not valid JSON');
   });
 
   it('names a file that is neither harness format', async () => {

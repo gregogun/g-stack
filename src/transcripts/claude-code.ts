@@ -119,7 +119,10 @@ export const claudeCode: SessionFormat = {
   sessionsRoot: (env, home) =>
     path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'projects'),
   projectDirName: (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, '-'),
-  idFromFileName: (name) => name.replace(/\.jsonl$/, ''),
+  // Session files are named <uuid>.jsonl; any other name carries no id.
+  idFromFileName: (name) =>
+    /^([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.jsonl$/i.exec(name)?.[1] ??
+    null,
   recognises: (entries) =>
     entries.some(
       (entry) =>
