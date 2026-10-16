@@ -6,13 +6,14 @@ import {
   type Context,
 } from './command.ts';
 import { check } from './commands/check.ts';
+import { install } from './commands/install.ts';
 import { log } from './commands/log.ts';
 import { models } from './commands/models.ts';
 import { spawn } from './commands/spawn.ts';
 import { transcript } from './commands/transcript.ts';
 
 /** Every command, in help order. To add one, append it here. */
-const commands: Command[] = [models, transcript, log, check, spawn];
+const commands: Command[] = [models, transcript, log, check, spawn, install];
 
 const help = (): string => {
   const lines = commands.flatMap((command) => [
