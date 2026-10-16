@@ -16,7 +16,7 @@ content/
 ```
 
 - Skills follow the agent-skills `SKILL.md` convention: frontmatter with `name` and `description`.
-- Every skill except the router carries `metadata.discoverable: "false"` in its frontmatter. Each adapter turns that into whatever its harness uses to keep a skill out of the model's list, where the harness supports it.
+- Every skill except the router carries `metadata.discoverable: "false"` in its frontmatter. Each adapter keeps such a skill out of the model's list in whatever way its harness allows, while still letting the router reach it by path. For example, the Claude Code adapter installs hidden skills as supporting files of the router; see [install](install.md).
 - Files refer to each other with relative markdown links, for example `[how](../skills/how/SKILL.md)`.
 - A verb is written as a call in inline code, for example `` `spawn(explorer, brief)` ``.
 
