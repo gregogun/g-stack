@@ -32,6 +32,23 @@ How each verb maps to this harness, and what to do when one is missing:
 [the adapter](adapter.md).
 `;
 
+/**
+ * Added to the installed router. Claude Code expands ${CLAUDE_SKILL_DIR}
+ * in SKILL.md (not in supporting files), so the model gets an absolute base
+ * for every file it reads from here on.
+ */
+const ROUTER_NOTE = `
+## Files
+
+Every file linked from here is installed in this skill's directory,
+\`\${CLAUDE_SKILL_DIR}\`. Resolve a relative link against the directory of
+the file that contains it, starting from \`\${CLAUDE_SKILL_DIR}/SKILL.md\`.
+How each verb maps to this harness: [the adapter](adapter.md).
+`;
+
+/** Appends `note` to `text`, separated by a blank line. */
+const append = (text: string, note: string) => `${text.trimEnd()}\n${note}`;
+
 export const claudeCode: Adapter = {
   harness: 'claude-code',
   root: (scope, context) => {
@@ -51,11 +68,15 @@ export const claudeCode: Adapter = {
   files: async () => {
     const files = await layOutContent(SHIPPED_CONTENT, place);
     return [
-      ...files.map((file) =>
-        file.path === 'HARNESS.md'
-          ? { ...file, text: file.text.trimEnd() + '\n' + POINTER }
-          : file
-      ),
+      ...files.map((file) => {
+        if (file.path === 'HARNESS.md') {
+          return { ...file, text: append(file.text, POINTER) };
+        }
+        if (file.path === 'SKILL.md') {
+          return { ...file, text: append(file.text, ROUTER_NOTE) };
+        }
+        return file;
+      }),
       { path: 'adapter.md', text: await readFile(VERBS_DOC, 'utf8') },
     ];
   },
