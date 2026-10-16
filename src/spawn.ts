@@ -2,6 +2,7 @@
  * Runs one subagent on a backend CLI and turns the result into a report.
  */
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import type { BackendCli } from './backends/index.ts';
 import type { Context } from './command.ts';
 
@@ -17,6 +18,9 @@ const KILL_GRACE_MS = 2000;
 
 /** How long to wait for output after the child exits. */
 const CLOSE_GRACE_MS = 200;
+
+/** Signals that stop gstack, and with it the backend's process group. */
+const STOP_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 /**
  * Runs `backend` headlessly in `context.cwd` with `prompt` on stdin. The
@@ -60,6 +64,23 @@ export const runBackend = (
       }
     };
 
+    // If gstack itself is stopped (pi aborting the spawn tool sends SIGTERM
+    // to gstack only), take the backend's process group down with it rather
+    // than leave it running unparented, then exit as the signal would have.
+    const onSignal = (signal: NodeJS.Signals) => {
+      killGroup('SIGTERM');
+      const exit = () => {
+        killGroup('SIGKILL');
+        process.exit(128 + os.constants.signals[signal]);
+      };
+      child.once('exit', exit);
+      setTimeout(exit, KILL_GRACE_MS).unref();
+    };
+    for (const signal of STOP_SIGNALS) process.once(signal, onSignal);
+    const stopListening = () => {
+      for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
+    };
+
     const timers = new Set<NodeJS.Timeout>();
     const after = (ms: number, fn: () => void): NodeJS.Timeout => {
       const timer = setTimeout(fn, ms);
@@ -73,6 +94,7 @@ export const runBackend = (
       if (settled) return;
       settled = true;
       timers.forEach(clearTimeout);
+      stopListening();
       // A grandchild may still hold the pipes open; stop waiting for it.
       child.stdout.destroy();
       child.stderr.destroy();
@@ -97,6 +119,7 @@ export const runBackend = (
       if (settled) return;
       settled = true;
       timers.forEach(clearTimeout);
+      stopListening();
       reject(error);
     });
     // Settle on exit, not close: a background job the child left behind can
