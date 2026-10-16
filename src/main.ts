@@ -8,9 +8,10 @@ import {
 import { check } from './commands/check.ts';
 import { log } from './commands/log.ts';
 import { models } from './commands/models.ts';
+import { spawn } from './commands/spawn.ts';
 
 /** Every command, in help order. To add one, append it here. */
-const commands: Command[] = [models, log, check];
+const commands: Command[] = [models, log, check, spawn];
 
 const help = (): string => {
   const lines = commands.flatMap((command) => [
