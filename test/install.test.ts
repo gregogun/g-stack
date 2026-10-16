@@ -232,6 +232,21 @@ describe('gstack install --harness claude-code', () => {
     expect(existsSync(path.join(g, 'retired'))).toBe(false);
   });
 
+  it('removes a stale file beside shipped ones and keeps their directory', async () => {
+    const sandbox = await createSandbox();
+    await install(sandbox);
+    const g = path.join(userSkills(sandbox), 'g');
+    await editManifest(sandbox, (files) => [...files, 'playbooks/old.md']);
+    await writeFileIn(g, 'playbooks/old.md', 'retired\n');
+
+    const result = await install(sandbox);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/remove\s+playbooks\/old\.md/);
+    expect(existsSync(path.join(g, 'playbooks', 'old.md'))).toBe(false);
+    expect(existsSync(path.join(g, 'playbooks', 'explain.md'))).toBe(true);
+  });
+
   it('refuses to overwrite a file it did not write', async () => {
     const sandbox = await createSandbox();
     const g = path.join(userSkills(sandbox), 'g');
