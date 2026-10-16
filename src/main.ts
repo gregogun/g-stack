@@ -5,9 +5,10 @@ import {
   type Command,
   type Context,
 } from './command.ts';
+import { models } from './commands/models.ts';
 
 /** Every command, in help order. To add one, append it here. */
-const commands: Command[] = [];
+const commands: Command[] = [models];
 
 const help = (): string => {
   const lines = commands.flatMap((command) => [

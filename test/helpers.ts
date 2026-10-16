@@ -11,7 +11,7 @@
  *   await fakeBin(sandbox, 'pi', 'echo hello');
  *   const result = await runCli(['models', 'get', 'explorer'], sandbox);
  */
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach } from 'vitest';
@@ -47,6 +47,32 @@ export const createSandbox = async (): Promise<Sandbox> => {
     Object.values(sandbox).map((dir) => mkdir(dir, { recursive: true }))
   );
   return sandbox;
+};
+
+/** Writes `content` to `file` (relative to `dir`), creating parent dirs. */
+export const writeFileIn = async (
+  dir: string,
+  file: string,
+  content: string
+): Promise<string> => {
+  const target = path.join(dir, file);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, content);
+  return target;
+};
+
+/**
+ * Puts an executable `name` on the sandbox's PATH that runs `script` with
+ * /bin/sh, e.g. `fakeBin(sandbox, 'pi', 'echo "$@" > args.txt')`.
+ */
+export const fakeBin = async (
+  sandbox: Sandbox,
+  name: string,
+  script = 'exit 0'
+): Promise<string> => {
+  const file = await writeFileIn(sandbox.bin, name, `#!/bin/sh\n${script}\n`);
+  await chmod(file, 0o755);
+  return file;
 };
 
 export type CliResult = {

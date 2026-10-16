@@ -7,7 +7,7 @@ describe('gstack --help', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/^Usage: gstack /);
-    expect(result.stdout).toContain('Commands:');
+    expect(result.stdout).toContain('models get <role> [--json]');
     expect(result.stderr).toBe('');
   });
 });
