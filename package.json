@@ -1,0 +1,34 @@
+{
+  "name": "g-stack",
+  "version": "0.0.0",
+  "description": "A harness-neutral skill layer for coding agents",
+  "type": "module",
+  "bin": {
+    "gstack": "./src/cli.ts"
+  },
+  "scripts": {
+    "lint": "oxlint && eslint .",
+    "types:check": "tsc --pretty --noEmit",
+    "knip": "knip",
+    "format:check": "prettier --check .",
+    "prepare": "lefthook install"
+  },
+  "packageManager": "pnpm@10.5.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "lefthook"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.12.0",
+    "eslint-plugin-oxlint": "^1.88.0",
+    "knip": "^6.41.0",
+    "lefthook": "^2.2.2",
+    "oxlint": "^1.88.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0",
+    "typescript-eslint": "^8.71.2"
+  }
+}
